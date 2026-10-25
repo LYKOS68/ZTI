@@ -279,7 +279,7 @@ func TestSaveLoadRoundtrip(t *testing.T) {
 		Data:      "VALID_DATA",
 		Hash:      ptr("abc"),
 		LatencyMs: 0.6,
-		History:   []any{map[string]any{"tick": json.Number("1")}},
+		History:   []any{json.RawMessage(`{"z":1,"a":2}`)}, // bewusst nicht alphabetisch
 		Status:    StatusUpdated,
 		Tick:      4,
 	}
@@ -290,7 +290,14 @@ func TestSaveLoadRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gleich(t, got, want)
+	a, _ := json.Marshal(got)
+	b, _ := json.Marshal(want)
+	if string(a) != string(b) {
+		t.Fatalf("Roundtrip:\n got %s\nwant %s", a, b)
+	}
+	if !strings.Contains(string(a), `"history":[{"z":1,"a":2}]`) {
+		t.Fatalf("Schlüsselreihenfolge in history verändert: %s", a)
+	}
 	if m, _ := filepath.Glob(path + ".*.tmp"); len(m) != 0 {
 		t.Fatalf("tmp-Dateien übrig: %v", m)
 	}

@@ -241,8 +241,14 @@ func DecodeState(b []byte) (SharedState, error) {
 		}
 	}
 	if t := bytes.TrimSpace(raw["history"]); len(t) > 0 && t[0] == '[' {
-		if err := decodeAny(t, &s.History); err != nil {
+		// Einträge als Roh-JSON: so bleibt ihre Schlüsselreihenfolge beim Zurückschreiben erhalten.
+		var eintraege []json.RawMessage
+		if err := json.Unmarshal(t, &eintraege); err != nil {
 			return SharedState{}, fmt.Errorf("history: %w", err)
+		}
+		s.History = make([]any, len(eintraege))
+		for i, e := range eintraege {
+			s.History[i] = e
 		}
 	} else {
 		s.badHistory = true
