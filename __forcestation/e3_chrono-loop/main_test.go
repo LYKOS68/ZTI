@@ -210,7 +210,8 @@ func TestPreWakeReset(t *testing.T) {
 	if res != "TICK 0: PRE-WAKE RESET (Zustand war inkonsistent)" {
 		t.Fatalf("Zyklus = %q", res)
 	}
-	if !reflect.DeepEqual(l.State, SharedState{History: []any{}, Status: StatusClean}) {
+	want := SharedState{History: []any{}, Status: StatusClean, Telemetry: nachZyklus(0)}
+	if !reflect.DeepEqual(l.State, want) {
 		t.Fatalf("Zustand = %+v", l.State)
 	}
 }
@@ -279,8 +280,8 @@ func TestStepDatei(t *testing.T) {
 		t.Fatal(err)
 	}
 	var m map[string]json.RawMessage
-	if err := json.Unmarshal(b, &m); err != nil || len(m) != 6 {
-		t.Fatalf("Datei hat nicht die 6 ABCD-Felder: %s", b)
+	if err := json.Unmarshal(b, &m); err != nil || len(m) != 7 {
+		t.Fatalf("Datei hat nicht die 7 Schema-Felder: %s", b)
 	}
 	var hist []Verlauf
 	if err := json.Unmarshal(m["history"], &hist); err != nil || len(hist) != 3 {
@@ -312,14 +313,16 @@ func TestStepInkonsistenteDatei(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(s, SharedState{History: []any{}, Status: StatusClean}) {
+	want := SharedState{History: []any{}, Status: StatusClean, Telemetry: nachZyklus(0)}
+	if !reflect.DeepEqual(s, want) {
 		t.Fatalf("Datei = %+v", s)
 	}
 }
 
-func TestSchemaWieABCD(t *testing.T) {
+func TestSchemaWieZOOMSEK(t *testing.T) {
 	b, _ := json.Marshal(NewSharedState())
-	const want = `{"data":null,"hash":null,"latency_ms":0,"history":[],"status":"SLEEP","tick":0}`
+	const want = `{"data":null,"hash":null,"latency_ms":0,"history":[],"status":"SLEEP","tick":0,` +
+		`"telemetry":{"sektion":"S1","zoom":"MAKRO","active_operator":"ALPHA","last_bit":null}}`
 	if string(b) != want {
 		t.Fatalf("Schema = %s; want %s", b, want)
 	}
@@ -366,5 +369,52 @@ func TestCLIFehler(t *testing.T) {
 		if code, out := runCLI(t, args...); code != exitUsage {
 			t.Errorf("run(%v) = %d %q; want %d", args, code, out, exitUsage)
 		}
+	}
+}
+
+func TestTelemetryNachZyklus(t *testing.T) {
+	l := NewChronoLoop(reihenfolgen["ABC"], 1, func() float64 { return 0 })
+	if !l.State.Telemetry.gueltig() || l.State.Telemetry != NewTelemetry() {
+		t.Fatalf("Start = %+v", l.State.Telemetry)
+	}
+	for _, tt := range []struct {
+		input   string
+		sektion string
+		zoom    string
+		bit     int
+	}{
+		{"x", "S5", "META", 1},
+		{"INVALID", "S4", "NANO", 0},
+	} {
+		if _, err := l.Zyklus(ptr(tt.input)); err != nil {
+			t.Fatal(err)
+		}
+		tel := l.State.Telemetry
+		if tel.Sektion != tt.sektion || tel.Zoom != tt.zoom || tel.ActiveOperator != "DELTA" ||
+			tel.LastBit == nil || *tel.LastBit != tt.bit || !tel.gueltig() {
+			t.Fatalf("%s: telemetry = %+v", tt.input, tel)
+		}
+	}
+}
+
+func TestTelemetryUngueltigLoestPreWakeAus(t *testing.T) {
+	for name, tel := range map[string]string{
+		"I10 verletzt": `{"sektion":"S3","zoom":"MESO","active_operator":"DELTA","last_bit":null}`,
+		"last_bit 2":   `{"sektion":"S1","zoom":"MAKRO","active_operator":"ALPHA","last_bit":2}`,
+		"feld fehlt":   `{"sektion":"S1","zoom":"MAKRO","active_operator":"ALPHA"}`,
+		"kein objekt":  `"S1"`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "state.json")
+			body := `{"data":null,"hash":null,"latency_ms":0,"history":[],"status":"CLEAN","tick":3,` +
+				`"telemetry":` + tel + `}`
+			if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			code, out := runCLI(t, "step", path, "X")
+			if code != exitOK || !strings.Contains(out, "TICK 3: PRE-WAKE RESET") {
+				t.Fatalf("code %d out %q", code, out)
+			}
+		})
 	}
 }
