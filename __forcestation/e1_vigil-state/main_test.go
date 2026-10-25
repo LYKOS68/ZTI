@@ -8,14 +8,36 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
 
-// stateJSON baut ein Zustandsobjekt mit data=null aus rohen JSON-Werten.
-func stateJSON(tick, pulse, status string) string {
-	return fmt.Sprintf(`{"data":null,"tick":%s,"last_pulse":%s,"status":%s}`, tick, pulse, status)
+const zuGross = `99999999999999999999` // > int64
+
+// stateJSON baut ein Zustandsobjekt nach ABCD-Schema; data=null, hash=null, history=[].
+func stateJSON(tick, latency, status string) string {
+	return fmt.Sprintf(`{"data":null,"hash":null,"latency_ms":%s,"history":[],"status":%s,"tick":%s}`,
+		latency, status, tick)
 }
+
+// mit ersetzt ein Feld in einem stateJSON-Objekt.
+func mit(body, feld, wert string) string {
+	var m map[string]json.RawMessage
+	_ = json.Unmarshal([]byte(body), &m)
+	m[feld] = json.RawMessage(wert)
+	b, _ := json.Marshal(m)
+	return string(b)
+}
+
+func gleich(t *testing.T, got, want SharedState) {
+	t.Helper()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v\nwant %+v", got, want)
+	}
+}
+
+func ptr(s string) *string { return &s }
 
 func TestIsValid(t *testing.T) {
 	tests := []struct {
@@ -24,15 +46,16 @@ func TestIsValid(t *testing.T) {
 		want bool
 	}{
 		{"neu", NewSharedState(), true},
-		{"updated", SharedState{Tick: 3, LastPulse: 1.5, Status: StatusUpdated, Data: "X"}, true},
+		{"updated", SharedState{Data: "X", Hash: ptr("h"), Status: StatusUpdated, Tick: 3}, true},
 		{"clean", SharedState{Status: StatusClean}, true},
-		{"wake", SharedState{Status: StatusWake}, true},
 		{"nullwert status leer", SharedState{}, false},
 		{"tick negativ", SharedState{Tick: -1, Status: StatusSleep}, false},
-		{"pulse NaN", SharedState{LastPulse: math.NaN(), Status: StatusSleep}, false},
-		{"pulse Inf", SharedState{LastPulse: math.Inf(1), Status: StatusSleep}, false},
+		{"latency negativ", SharedState{LatencyMs: -0.1, Status: StatusSleep}, false},
+		{"latency NaN", SharedState{LatencyMs: math.NaN(), Status: StatusSleep}, false},
+		{"latency Inf", SharedState{LatencyMs: math.Inf(1), Status: StatusSleep}, false},
+		{"hash falscher typ", SharedState{badHash: true, Status: StatusSleep}, false},
+		{"history falscher typ", SharedState{badHistory: true, Status: StatusSleep}, false},
 		{"status unbekannt", SharedState{Status: "BOOM"}, false},
-		{"status kleingeschrieben", SharedState{Status: "sleep"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -44,36 +67,55 @@ func TestIsValid(t *testing.T) {
 }
 
 func TestCheckMeldetJedeVerletzung(t *testing.T) {
-	err := SharedState{Tick: -1, LastPulse: math.NaN(), Status: "X"}.Check()
-	if !errors.Is(err, ErrInkonsistent) || strings.Count(err.Error(), "inkonsistent") != 3 {
-		t.Fatalf("Check() = %v; want 3 Verletzungen", err)
+	s := SharedState{Tick: -1, LatencyMs: math.NaN(), badHash: true, badHistory: true, Status: "X"}
+	err := s.Check()
+	if !errors.Is(err, ErrInkonsistent) || strings.Count(err.Error(), "inkonsistent") != 5 {
+		t.Fatalf("Check() = %v; want 5 Verletzungen", err)
 	}
 }
 
-const zuGross = `99999999999999999999` // > int64
+// Prüfhelfer für TestDecodeStateTypen.
+type pruef func(SharedState) bool
+
+func tickIst(n int64) pruef      { return func(s SharedState) bool { return s.Tick == n } }
+func latencyIst(f float64) pruef { return func(s SharedState) bool { return s.LatencyMs == f } }
+func statusIst(st Status) pruef  { return func(s SharedState) bool { return s.Status == st } }
+func historyLen(n int) pruef     { return func(s SharedState) bool { return len(s.History) == n } }
+
+var (
+	latencyNaN pruef = func(s SharedState) bool { return math.IsNaN(s.LatencyMs) }
+	hashKaputt pruef = func(s SharedState) bool { return s.badHash }
+	histKaputt pruef = func(s SharedState) bool { return s.badHistory }
+	hashABC    pruef = func(s SharedState) bool { return s.Hash != nil && *s.Hash == "abc" }
+)
 
 func TestDecodeStateTypen(t *testing.T) {
+	ok := stateJSON(`2`, `1.5`, `"WAKE"`)
+	sleep := func(tick, latency string) string { return stateJSON(tick, latency, `"SLEEP"`) }
 	tests := []struct {
-		name     string
-		body     string
-		tick     int64
-		pulseNaN bool
-		status   Status
-		valid    bool
+		name  string
+		body  string
+		valid bool
+		check pruef
 	}{
-		{"gültig", stateJSON(`2`, `1.5`, `"WAKE"`), 2, false, StatusWake, true},
-		{"pulse als int", stateJSON(`0`, `7`, `"SLEEP"`), 0, false, StatusSleep, true},
-		{"tick als float", stateJSON(`1.5`, `0`, `"SLEEP"`), -1, false, StatusSleep, false},
-		{"tick als exponent", stateJSON(`1e3`, `0`, `"SLEEP"`), -1, false, StatusSleep, false},
-		{"tick als string", stateJSON(`"3"`, `0`, `"SLEEP"`), -1, false, StatusSleep, false},
-		{"tick als bool", stateJSON(`true`, `0`, `"SLEEP"`), -1, false, StatusSleep, false},
-		{"tick negativ", stateJSON(`-4`, `0`, `"SLEEP"`), -4, false, StatusSleep, false},
-		{"tick überlauf", stateJSON(zuGross, `0`, `"SLEEP"`), -1, false, StatusSleep, false},
-		{"pulse als bool", stateJSON(`0`, `false`, `"SLEEP"`), 0, true, StatusSleep, false},
-		{"pulse als string", stateJSON(`0`, `"0.0"`, `"SLEEP"`), 0, true, StatusSleep, false},
-		{"pulse null", stateJSON(`0`, `null`, `"SLEEP"`), 0, true, StatusSleep, false},
-		{"status als zahl", stateJSON(`0`, `0`, `1`), 0, false, "", false},
-		{"felder fehlen", `{}`, -1, true, "", false},
+		{"gültig", ok, true, tickIst(2)},
+		{"latency gültig", ok, true, latencyIst(1.5)},
+		{"latency als int", sleep(`0`, `7`), true, latencyIst(7)},
+		{"hash string", mit(ok, "hash", `"abc"`), true, hashABC},
+		{"history mit inhalt", mit(ok, "history", `[1,{"a":2}]`), true, historyLen(2)},
+		{"tick als float", sleep(`1.5`, `0`), false, tickIst(-1)},
+		{"tick als string", sleep(`"3"`, `0`), false, tickIst(-1)},
+		{"tick als bool", sleep(`true`, `0`), false, tickIst(-1)},
+		{"tick überlauf", sleep(zuGross, `0`), false, tickIst(-1)},
+		{"latency als string", sleep(`0`, `"0"`), false, latencyNaN},
+		{"latency negativ", sleep(`0`, `-1`), false, latencyIst(-1)},
+		{"hash als zahl", mit(ok, "hash", `5`), false, hashKaputt},
+		{"history als objekt", mit(ok, "history", `{}`), false, histKaputt},
+		{"history null", mit(ok, "history", `null`), false, histKaputt},
+		{"status als zahl", stateJSON(`0`, `0`, `1`), false, statusIst("")},
+		{"felder fehlen: hash", `{}`, false, hashKaputt},
+		{"felder fehlen: history", `{}`, false, histKaputt},
+		{"felder fehlen: tick", `{}`, false, tickIst(-1)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -81,11 +123,8 @@ func TestDecodeStateTypen(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if s.Tick != tt.tick || math.IsNaN(s.LastPulse) != tt.pulseNaN || s.Status != tt.status {
-				t.Fatalf("got %+v", s)
-			}
-			if s.IsValid() != tt.valid {
-				t.Fatalf("IsValid() = %v; want %v", s.IsValid(), tt.valid)
+			if !tt.check(s) || s.IsValid() != tt.valid {
+				t.Fatalf("got %+v valid=%v (%v)", s, s.IsValid(), s.Check())
 			}
 		})
 	}
@@ -93,8 +132,7 @@ func TestDecodeStateTypen(t *testing.T) {
 
 func TestDecodeStateData(t *testing.T) {
 	const data = `{"n":12345678901234567890}`
-	body := strings.Replace(stateJSON(`0`, `0`, `"SLEEP"`), "null", data, 1)
-	s, err := DecodeState([]byte(body))
+	s, err := DecodeState([]byte(mit(stateJSON(`0`, `0`, `"SLEEP"`), "data", data)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,12 +143,13 @@ func TestDecodeStateData(t *testing.T) {
 
 func TestDecodeStateFehler(t *testing.T) {
 	for name, body := range map[string]string{
-		"unbekanntes feld": strings.Replace(stateJSON(`0`, `0`, `"SLEEP"`), "}", `,"x":1}`, 1),
-		"array":            `[1,2]`,
-		"null":             `null`,
-		"müll danach":      `{"tick":0} {}`,
-		"kein json":        `tick=0`,
-		"leer":             ``,
+		"altes feld last_pulse": mit(stateJSON(`0`, `0`, `"SLEEP"`), "last_pulse", `0`),
+		"unbekanntes feld":      mit(stateJSON(`0`, `0`, `"SLEEP"`), "x", `1`),
+		"array":                 `[1,2]`,
+		"null":                  `null`,
+		"müll danach":           `{"tick":0} {}`,
+		"kein json":             `tick=0`,
+		"leer":                  ``,
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := DecodeState([]byte(body)); err == nil {
@@ -121,25 +160,30 @@ func TestDecodeStateFehler(t *testing.T) {
 }
 
 func TestHeal(t *testing.T) {
+	hist := []any{"eintrag"}
 	tests := []struct {
 		name string
 		in   SharedState
 		want SharedState
 	}{
 		{
-			name: "updated → clean, tick bleibt",
-			in:   SharedState{Data: "VALID_DATA", Tick: 3, LastPulse: 0.6, Status: StatusUpdated},
-			want: SharedState{Tick: 3, LastPulse: 0.6, Status: StatusClean},
+			name: "updated → clean, tick und history bleiben",
+			in: SharedState{
+				Data: "X", Hash: ptr("h"), LatencyMs: 0.6, History: hist, Status: StatusUpdated, Tick: 3,
+			},
+			want: SharedState{LatencyMs: 0.6, History: hist, Status: StatusClean, Tick: 3},
 		},
 		{
-			name: "tick kaputt → 0",
-			in:   SharedState{Data: 1, Tick: -1, LastPulse: 2, Status: "BOOM"},
-			want: SharedState{Tick: 0, LastPulse: 2, Status: StatusClean},
+			name: "alles kaputt → nullwerte",
+			in: SharedState{
+				Data: 1, badHash: true, LatencyMs: math.NaN(), badHistory: true, Status: "BOOM", Tick: -1,
+			},
+			want: SharedState{History: []any{}, Status: StatusClean},
 		},
 		{
-			name: "pulse kaputt → 0",
-			in:   SharedState{Tick: 5, LastPulse: math.NaN(), Status: StatusWake},
-			want: SharedState{Tick: 5, LastPulse: 0, Status: StatusClean},
+			name: "latency negativ → 0",
+			in:   SharedState{LatencyMs: -5, History: []any{}, Status: StatusWake, Tick: 5},
+			want: SharedState{History: []any{}, Status: StatusClean, Tick: 5},
 		},
 	}
 	for _, tt := range tests {
@@ -149,9 +193,7 @@ func TestHeal(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if s != tt.want {
-				t.Fatalf("Heal() → %+v; want %+v", s, tt.want)
-			}
+			gleich(t, s, tt.want)
 			if alt.Data != tt.in.Data || alt.Tick != tt.in.Tick || alt.Status != tt.in.Status {
 				t.Fatalf("reset_von = %+v; want Vorzustand %+v", alt, tt.in)
 			}
@@ -214,7 +256,6 @@ func TestRohwerte(t *testing.T) {
 			if !strings.HasSuffix(string(r), wantReset) {
 				t.Fatalf("reset_von = %s; want …%s", r, wantReset)
 			}
-
 			if s.rawTick != "" || s.rawStatus != "" {
 				t.Fatalf("nach Heal noch Rohwerte: %q, %q", s.rawTick, s.rawStatus)
 			}
@@ -234,7 +275,14 @@ func TestSaveStateVerweigertInkonsistent(t *testing.T) {
 
 func TestSaveLoadRoundtrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.json")
-	want := SharedState{Data: "VALID_DATA", Tick: 4, LastPulse: 0.6, Status: StatusUpdated}
+	want := SharedState{
+		Data:      "VALID_DATA",
+		Hash:      ptr("abc"),
+		LatencyMs: 0.6,
+		History:   []any{map[string]any{"tick": json.Number("1")}},
+		Status:    StatusUpdated,
+		Tick:      4,
+	}
 	if err := SaveState(path, want); err != nil {
 		t.Fatal(err)
 	}
@@ -242,11 +290,24 @@ func TestSaveLoadRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != want {
-		t.Fatalf("got %+v; want %+v", got, want)
-	}
+	gleich(t, got, want)
 	if m, _ := filepath.Glob(path + ".*.tmp"); len(m) != 0 {
 		t.Fatalf("tmp-Dateien übrig: %v", m)
+	}
+}
+
+func TestSchemaWieABCD(t *testing.T) {
+	b, err := json.Marshal(NewSharedState())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `{"data":null,"hash":null,"latency_ms":0,"history":[],"status":"SLEEP","tick":0}`
+	if string(b) != want {
+		t.Fatalf("Schema = %s; want %s", b, want)
+	}
+	b, _ = json.Marshal(SharedState{Status: StatusClean})
+	if !strings.Contains(string(b), `"history":[]`) {
+		t.Fatalf("nil-History muss als [] erscheinen: %s", b)
 	}
 }
 
@@ -286,17 +347,23 @@ func TestCLIAblauf(t *testing.T) {
 			t.Fatalf("run(%v) = %d %q; want %d %q", st.args, code, out, st.code, st.want)
 		}
 	}
+	b, _ := os.ReadFile(path)
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil || len(m) != 6 {
+		t.Fatalf("Datei hat nicht die 6 ABCD-Felder: %s", b)
+	}
 }
 
 func TestCLIGuardHeiltInkonsistent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.json")
-	body := `{"data":"VALID_DATA","tick":"7","last_pulse":true,"status":"BOOM"}`
+	body := `{"data":"VALID_DATA","hash":7,"latency_ms":true,` +
+		`"history":"x","status":"BOOM","tick":"7"}`
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	code, out := runCLI(t, "check", path)
-	if code != exitInkonsistent || strings.Count(out, "inkonsistent") != 3 {
+	if code != exitInkonsistent || strings.Count(out, "inkonsistent") != 5 {
 		t.Fatalf("check = %d %q", code, out)
 	}
 	code, out = runCLI(t, "capture", path)
@@ -315,7 +382,5 @@ func TestCLIGuardHeiltInkonsistent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (SharedState{Status: StatusClean}); s != want {
-		t.Fatalf("nach guard: %+v; want %+v", s, want)
-	}
+	gleich(t, s, SharedState{History: []any{}, Status: StatusClean})
 }

@@ -1,12 +1,11 @@
 // Vigil-State: Zustands- und Invarianten-Engine.
 //
-// Go-Portierung von SharedState + konsistent() (loop.py), dem validierten
-// RESET mit Post-Heal-Check (CharlieGuard, loop.py), dem Pre-Wake-Check
-// (ChronoLoop.step / zti_step) und der Loop-Seite von capture_zustand
-// (zti_runner.py). Der Zustand liegt als JSON-Datei vor.
+// Zustandsschema und Invariante aus ABCD.yaml (shared_state), validierter
+// RESET mit Post-Heal-Check und Pre-Wake-Check aus loop.py, Loop-Seite von
+// capture_zustand aus zti_runner.py. Der Zustand liegt als JSON-Datei vor.
 //
-//	vigil init    <state.json>  legt SharedState() an (data=null, tick=0, last_pulse=0, SLEEP)
-//	vigil check   <state.json>  prüft konsistent()
+//	vigil init    <state.json>  legt shared_state.schema an (data=null, hash=null, …, SLEEP)
+//	vigil check   <state.json>  prüft Invariante und Feldtypen
 //	vigil capture <state.json>  misst Z: loop_tick, loop_status, loop_data, loop_konsistent
 //	vigil heal    <state.json>  CharlieGuard-RESET → CLEAN, speichert atomar, gibt reset_von aus
 //	vigil guard   <state.json>  Pre-Wake-Check: nur bei Inkonsistenz heal
@@ -63,19 +62,33 @@ func (s Status) Valid() bool {
 // 2. ZUSTAND — SharedState
 // ============================================================================
 
-// SharedState ist der gemeinsame Zustand des Loops.
-// Ungültige Werte aus der Datei bleiben darstellbar, damit konsistent() sie
+// SharedState ist der gemeinsame Zustand nach ABCD.yaml (shared_state.schema).
+// Ungültige Werte aus der Datei bleiben darstellbar, damit Check() sie
 // erkennen und Heal() sie reparieren kann: Tick < 0 steht für "kein int ≥ 0",
-// LastPulse NaN für "keine Zahl".
+// LatencyMs NaN für "keine Zahl".
 type SharedState struct {
 	Data      any     `json:"data"`
-	Tick      int64   `json:"tick"`
-	LastPulse float64 `json:"last_pulse"`
+	Hash      *string `json:"hash"`
+	LatencyMs float64 `json:"latency_ms"`
+	History   []any   `json:"history"`
 	Status    Status  `json:"status"`
+	Tick      int64   `json:"tick"`
 
 	// Dateiwerte mit falschem Typ, für reset_von und capture; sonst leer.
 	rawTick   rawJSON
 	rawStatus rawJSON
+	// hash ist weder null noch String bzw. history ist keine Liste.
+	badHash, badHistory bool
+}
+
+// MarshalJSON schreibt eine fehlende History als [] statt null.
+func (s SharedState) MarshalJSON() ([]byte, error) {
+	type plain SharedState
+	p := plain(s)
+	if p.History == nil {
+		p.History = []any{}
+	}
+	return json.Marshal(p)
 }
 
 // rawJSON ist ein Feldwert, unverändert als JSON-Text aus der Datei.
@@ -98,17 +111,19 @@ func (s SharedState) statusWert() any {
 	return s.Status
 }
 
+// NewSharedState ist shared_state.schema aus ABCD.yaml.
 func NewSharedState() SharedState {
-	return SharedState{Status: StatusSleep}
+	return SharedState{History: []any{}, Status: StatusSleep}
 }
 
 func (s SharedState) tickOK() bool { return s.Tick >= 0 }
 
-func (s SharedState) pulseOK() bool {
-	return !math.IsNaN(s.LastPulse) && !math.IsInf(s.LastPulse, 0)
+func (s SharedState) latencyOK() bool {
+	return !math.IsNaN(s.LatencyMs) && !math.IsInf(s.LatencyMs, 0) && s.LatencyMs >= 0
 }
 
-// IsValid ist konsistent() aus loop.py: Feldtypen und -werte im erlaubten Bereich.
+// IsValid: die ABCD-Invariante (tick ≥ 0, status gültig) plus Typprüfung
+// der übrigen Felder.
 func (s SharedState) IsValid() bool { return s.Check() == nil }
 
 // Check liefert jede verletzte Invariante einzeln.
@@ -117,8 +132,14 @@ func (s SharedState) Check() error {
 	if !s.tickOK() {
 		errs = append(errs, fmt.Errorf("%w: tick muss int ≥ 0 sein", ErrInkonsistent))
 	}
-	if !s.pulseOK() {
-		errs = append(errs, fmt.Errorf("%w: last_pulse muss eine Zahl sein", ErrInkonsistent))
+	if !s.latencyOK() {
+		errs = append(errs, fmt.Errorf("%w: latency_ms muss eine Zahl ≥ 0 sein", ErrInkonsistent))
+	}
+	if s.badHash {
+		errs = append(errs, fmt.Errorf("%w: hash muss null oder ein String sein", ErrInkonsistent))
+	}
+	if s.badHistory {
+		errs = append(errs, fmt.Errorf("%w: history muss eine Liste sein", ErrInkonsistent))
 	}
 	if !s.Status.Valid() {
 		const erlaubt = "{SLEEP, WAKE, UPDATED, CLEAN}"
@@ -135,16 +156,21 @@ type ResetVon struct {
 	Status any `json:"status"`
 }
 
-// Heal ist der validierte RESET (CharlieGuard.process): data leeren, ungültige
-// Felder auf Nullwert, status CLEAN, danach Post-Heal-Validierung.
+// Heal ist der validierte RESET: data und hash leeren, ungültige Felder auf
+// Nullwert, status CLEAN, danach Post-Heal-Validierung. Eine gültige history
+// bleibt erhalten.
 func (s *SharedState) Heal() (ResetVon, error) {
 	alt := ResetVon{Data: s.Data, Tick: s.tickWert(), Status: s.statusWert()}
 	s.Data = nil
+	s.Hash, s.badHash = nil, false
 	if !s.tickOK() {
 		s.Tick, s.rawTick = 0, ""
 	}
-	if !s.pulseOK() {
-		s.LastPulse = 0
+	if !s.latencyOK() {
+		s.LatencyMs = 0
+	}
+	if s.badHistory || s.History == nil {
+		s.History, s.badHistory = []any{}, false
 	}
 	s.Status, s.rawStatus = StatusClean, ""
 	if !s.IsValid() || s.Data != nil {
@@ -175,7 +201,9 @@ func (s SharedState) Capture() Capture {
 // 3. DEKODIERUNG — Typprüfung wie isinstance() in konsistent()
 // ============================================================================
 
-var stateKeys = map[string]bool{"data": true, "tick": true, "last_pulse": true, "status": true}
+var stateKeys = map[string]bool{
+	"data": true, "hash": true, "latency_ms": true, "history": true, "status": true, "tick": true,
+}
 
 // DecodeState liest ein JSON-Objekt. Falsche Feldtypen sind kein Fehler, sondern
 // werden zu ungültigen Werten, die Check() meldet und Heal() repariert.
@@ -199,23 +227,49 @@ func DecodeState(b []byte) (SharedState, error) {
 		}
 	}
 
-	s := SharedState{LastPulse: math.NaN()}
+	s := SharedState{LatencyMs: math.NaN()}
 
 	if v, ok := raw["data"]; ok {
-		d := json.NewDecoder(bytes.NewReader(v))
-		d.UseNumber()
-		if err := d.Decode(&s.Data); err != nil {
+		if err := decodeAny(v, &s.Data); err != nil {
 			return SharedState{}, fmt.Errorf("data: %w", err)
 		}
 	}
-	s.Tick, s.rawTick = decodeTick(raw["tick"])
-	if n, ok := number(raw["last_pulse"]); ok {
+	s.Hash, s.badHash = decodeHash(raw["hash"])
+	if n, ok := number(raw["latency_ms"]); ok {
 		if f, err := n.Float64(); err == nil {
-			s.LastPulse = f
+			s.LatencyMs = f
 		}
 	}
+	if t := bytes.TrimSpace(raw["history"]); len(t) > 0 && t[0] == '[' {
+		if err := decodeAny(t, &s.History); err != nil {
+			return SharedState{}, fmt.Errorf("history: %w", err)
+		}
+	} else {
+		s.badHistory = true
+	}
 	s.Status, s.rawStatus = decodeStatus(raw["status"])
+	s.Tick, s.rawTick = decodeTick(raw["tick"])
 	return s, nil
+}
+
+// decodeAny dekodiert mit json.Number, damit große Zahlen exakt bleiben.
+func decodeAny(v json.RawMessage, ziel any) error {
+	d := json.NewDecoder(bytes.NewReader(v))
+	d.UseNumber()
+	return d.Decode(ziel)
+}
+
+// decodeHash: null → nil, String → Wert, alles andere (auch fehlend) → ungültig.
+func decodeHash(v json.RawMessage) (*string, bool) {
+	t := bytes.TrimSpace(v)
+	if bytes.Equal(t, []byte("null")) {
+		return nil, false
+	}
+	var h string
+	if len(t) > 0 && t[0] == '"' && json.Unmarshal(t, &h) == nil {
+		return &h, false
+	}
+	return nil, true
 }
 
 // decodeTick liefert den int64-Wert, oder -1 und den Rohwert bei falschem Typ.
