@@ -15,10 +15,16 @@ import (
 
 const zuGross = `99999999999999999999` // > int64
 
-// stateJSON baut ein Zustandsobjekt nach ABCD-Schema; data=null, hash=null, history=[].
+// telStart ist die Start-Telemetrie als JSON.
+const telStart = `{"sektion":"S1","zoom":"MAKRO","active_operator":"ALPHA","last_bit":null}`
+
+var tel = NewTelemetry()
+
+// stateJSON baut ein Zustandsobjekt nach Schema; data=null, hash=null, history=[],
+// telemetry=Startwert.
 func stateJSON(tick, latency, status string) string {
-	return fmt.Sprintf(`{"data":null,"hash":null,"latency_ms":%s,"history":[],"status":%s,"tick":%s}`,
-		latency, status, tick)
+	return fmt.Sprintf(`{"data":null,"hash":null,"latency_ms":%s,"history":[],"status":%s,"tick":%s,`+
+		`"telemetry":%s}`, latency, status, tick, telStart)
 }
 
 // mit ersetzt ein Feld in einem stateJSON-Objekt.
@@ -46,16 +52,16 @@ func TestIsValid(t *testing.T) {
 		want bool
 	}{
 		{"neu", NewSharedState(), true},
-		{"updated", SharedState{Data: "X", Hash: ptr("h"), Status: StatusUpdated, Tick: 3}, true},
-		{"clean", SharedState{Status: StatusClean}, true},
+		{"updated", SharedState{Telemetry: tel, Data: "X", Hash: ptr("h"), Status: "UPDATED"}, true},
+		{"clean", SharedState{Telemetry: tel, Status: StatusClean}, true},
 		{"nullwert status leer", SharedState{}, false},
-		{"tick negativ", SharedState{Tick: -1, Status: StatusSleep}, false},
-		{"latency negativ", SharedState{LatencyMs: -0.1, Status: StatusSleep}, false},
-		{"latency NaN", SharedState{LatencyMs: math.NaN(), Status: StatusSleep}, false},
-		{"latency Inf", SharedState{LatencyMs: math.Inf(1), Status: StatusSleep}, false},
-		{"hash falscher typ", SharedState{badHash: true, Status: StatusSleep}, false},
-		{"history falscher typ", SharedState{badHistory: true, Status: StatusSleep}, false},
-		{"status unbekannt", SharedState{Status: "BOOM"}, false},
+		{"tick negativ", SharedState{Telemetry: tel, Tick: -1, Status: StatusSleep}, false},
+		{"latency negativ", SharedState{Telemetry: tel, LatencyMs: -0.1, Status: StatusSleep}, false},
+		{"latency NaN", SharedState{Telemetry: tel, LatencyMs: math.NaN(), Status: StatusSleep}, false},
+		{"latency Inf", SharedState{Telemetry: tel, LatencyMs: math.Inf(1), Status: StatusSleep}, false},
+		{"hash falscher typ", SharedState{Telemetry: tel, badHash: true, Status: StatusSleep}, false},
+		{"history kein array", SharedState{Telemetry: tel, badHistory: true, Status: "SLEEP"}, false},
+		{"status unbekannt", SharedState{Telemetry: tel, Status: "BOOM"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -68,9 +74,10 @@ func TestIsValid(t *testing.T) {
 
 func TestCheckMeldetJedeVerletzung(t *testing.T) {
 	s := SharedState{Tick: -1, LatencyMs: math.NaN(), badHash: true, badHistory: true, Status: "X"}
+	s.badTelemetry = true
 	err := s.Check()
-	if !errors.Is(err, ErrInkonsistent) || strings.Count(err.Error(), "inkonsistent") != 5 {
-		t.Fatalf("Check() = %v; want 5 Verletzungen", err)
+	if !errors.Is(err, ErrInkonsistent) || strings.Count(err.Error(), "inkonsistent") != 6 {
+		t.Fatalf("Check() = %v; want 6 Verletzungen", err)
 	}
 }
 
@@ -171,19 +178,19 @@ func TestHeal(t *testing.T) {
 			in: SharedState{
 				Data: "X", Hash: ptr("h"), LatencyMs: 0.6, History: hist, Status: StatusUpdated, Tick: 3,
 			},
-			want: SharedState{LatencyMs: 0.6, History: hist, Status: StatusClean, Tick: 3},
+			want: SharedState{Telemetry: tel, LatencyMs: 0.6, History: hist, Status: StatusClean, Tick: 3},
 		},
 		{
 			name: "alles kaputt → nullwerte",
 			in: SharedState{
 				Data: 1, badHash: true, LatencyMs: math.NaN(), badHistory: true, Status: "BOOM", Tick: -1,
 			},
-			want: SharedState{History: []any{}, Status: StatusClean},
+			want: SharedState{Telemetry: tel, History: []any{}, Status: StatusClean},
 		},
 		{
 			name: "latency negativ → 0",
-			in:   SharedState{LatencyMs: -5, History: []any{}, Status: StatusWake, Tick: 5},
-			want: SharedState{History: []any{}, Status: StatusClean, Tick: 5},
+			in:   SharedState{Telemetry: tel, LatencyMs: -5, History: []any{}, Status: StatusWake, Tick: 5},
+			want: SharedState{Telemetry: tel, History: []any{}, Status: StatusClean, Tick: 5},
 		},
 	}
 	for _, tt := range tests {
@@ -202,7 +209,7 @@ func TestHeal(t *testing.T) {
 }
 
 func TestCapture(t *testing.T) {
-	got := SharedState{Data: "X", Tick: 2, Status: StatusUpdated}.Capture()
+	got := SharedState{Telemetry: tel, Data: "X", Tick: 2, Status: StatusUpdated}.Capture()
 	want := Capture{
 		LoopTick:       int64(2),
 		LoopStatus:     StatusUpdated,
@@ -282,6 +289,7 @@ func TestSaveLoadRoundtrip(t *testing.T) {
 		History:   []any{json.RawMessage(`{"z":1,"a":2}`)}, // bewusst nicht alphabetisch
 		Status:    StatusUpdated,
 		Tick:      4,
+		Telemetry: Telemetry{Sektion: "S5", Zoom: "META", ActiveOperator: "DELTA", LastBit: eins},
 	}
 	if err := SaveState(path, want); err != nil {
 		t.Fatal(err)
@@ -303,16 +311,17 @@ func TestSaveLoadRoundtrip(t *testing.T) {
 	}
 }
 
-func TestSchemaWieABCD(t *testing.T) {
+func TestSchemaWieZOOMSEK(t *testing.T) {
 	b, err := json.Marshal(NewSharedState())
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = `{"data":null,"hash":null,"latency_ms":0,"history":[],"status":"SLEEP","tick":0}`
+	want := `{"data":null,"hash":null,"latency_ms":0,"history":[],"status":"SLEEP","tick":0,` +
+		`"telemetry":` + telStart + `}`
 	if string(b) != want {
 		t.Fatalf("Schema = %s; want %s", b, want)
 	}
-	b, _ = json.Marshal(SharedState{Status: StatusClean})
+	b, _ = json.Marshal(SharedState{Telemetry: tel, Status: StatusClean})
 	if !strings.Contains(string(b), `"history":[]`) {
 		t.Fatalf("nil-History muss als [] erscheinen: %s", b)
 	}
@@ -356,8 +365,8 @@ func TestCLIAblauf(t *testing.T) {
 	}
 	b, _ := os.ReadFile(path)
 	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil || len(m) != 6 {
-		t.Fatalf("Datei hat nicht die 6 ABCD-Felder: %s", b)
+	if err := json.Unmarshal(b, &m); err != nil || len(m) != 7 {
+		t.Fatalf("Datei hat nicht die 7 Schema-Felder: %s", b)
 	}
 }
 
@@ -370,7 +379,7 @@ func TestCLIGuardHeiltInkonsistent(t *testing.T) {
 	}
 
 	code, out := runCLI(t, "check", path)
-	if code != exitInkonsistent || strings.Count(out, "inkonsistent") != 5 {
+	if code != exitInkonsistent || strings.Count(out, "inkonsistent") != 6 {
 		t.Fatalf("check = %d %q", code, out)
 	}
 	code, out = runCLI(t, "capture", path)
@@ -389,5 +398,89 @@ func TestCLIGuardHeiltInkonsistent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gleich(t, s, SharedState{History: []any{}, Status: StatusClean})
+	gleich(t, s, SharedState{Telemetry: tel, History: []any{}, Status: StatusClean})
+}
+
+var (
+	null = (*int)(nil)
+	eins = func() *int { i := 1; return &i }()
+	zwei = func() *int { i := 2; return &i }()
+)
+
+func TestTelemetryI10(t *testing.T) {
+	tests := []struct {
+		name string
+		t    Telemetry
+		ok   bool
+	}{
+		{"start S1/MAKRO/ALPHA", NewTelemetry(), true},
+		{"S1/META/CHARLIE", Telemetry{"S1", "META", "CHARLIE", null}, true},
+		{"S3/MESO/BRAVO bit 1", Telemetry{"S3", "MESO", "BRAVO", eins}, true},
+		{"S4/NANO/DELTA", Telemetry{"S4", "NANO", "DELTA", null}, true},
+		{"S5/META/BRAVO", Telemetry{"S5", "META", "BRAVO", eins}, true},
+		{"sektion unbekannt", Telemetry{"S6", "META", "ALPHA", null}, false},
+		{"zoom passt nicht", Telemetry{"S1", "NANO", "ALPHA", null}, false},
+		{"zoom reduziert META_NANO", Telemetry{"S4", "META_NANO", "DELTA", null}, false},
+		{"operator passt nicht", Telemetry{"S3", "MESO", "DELTA", null}, false},
+		{"operator kleingeschrieben", Telemetry{"S1", "MAKRO", "alpha", null}, false},
+		{"last_bit 2", Telemetry{"S1", "MAKRO", "ALPHA", zwei}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.t.Check(); (err == nil) != tt.ok {
+				t.Fatalf("Check() = %v; ok want %v", err, tt.ok)
+			}
+		})
+	}
+}
+
+func TestDecodeTelemetry(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		bad  bool
+		want Telemetry
+	}{
+		{"start", telStart, false, NewTelemetry()},
+		{"last_bit 1", `{"sektion":"S5","zoom":"META","active_operator":"DELTA","last_bit":1}`, false,
+			Telemetry{"S5", "META", "DELTA", eins}},
+		{"fehlt", ``, true, Telemetry{}},
+		{"null", `null`, true, Telemetry{}},
+		{"liste", `[]`, true, Telemetry{}},
+		{"feld fehlt", `{"sektion":"S1","zoom":"MAKRO","active_operator":"ALPHA"}`, true, Telemetry{}},
+		{"feld zu viel", strings.Replace(telStart, "}", `,"x":1}`, 1),
+			true, Telemetry{}},
+		{"sektion zahl", strings.Replace(telStart, `"S1"`, `1`, 1), true, Telemetry{}},
+		{"last_bit string", `{"sektion":"S1","zoom":"MAKRO","active_operator":"ALPHA","last_bit":"1"}`,
+			true, Telemetry{}},
+		{"last_bit float", `{"sektion":"S1","zoom":"MAKRO","active_operator":"ALPHA","last_bit":0.5}`,
+			true, Telemetry{}},
+		{"last_bit bool", `{"sektion":"S1","zoom":"MAKRO","active_operator":"ALPHA","last_bit":true}`,
+			true, Telemetry{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, bad := decodeTelemetry(json.RawMessage(tt.raw))
+			if bad != tt.bad || !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("decodeTelemetry = %+v, %v; want %+v, %v", got, bad, tt.want, tt.bad)
+			}
+		})
+	}
+}
+
+func TestHealTelemetry(t *testing.T) {
+	gueltig := Telemetry{"S4", "NANO", "DELTA", eins}
+	s := SharedState{Telemetry: gueltig, History: []any{}, Status: StatusUpdated}
+	if _, err := s.Heal(); err != nil || !reflect.DeepEqual(s.Telemetry, gueltig) {
+		t.Fatalf("gültige telemetry muss bleiben: %+v, %v", s.Telemetry, err)
+	}
+
+	for _, kaputt := range []SharedState{
+		{Telemetry: Telemetry{"S3", "MESO", "DELTA", null}, Status: StatusWake}, // I10 verletzt
+		{badTelemetry: true, Status: StatusWake},                                // falscher Typ
+	} {
+		if _, err := kaputt.Heal(); err != nil || !reflect.DeepEqual(kaputt.Telemetry, NewTelemetry()) {
+			t.Fatalf("ungültige telemetry muss auf Startwert: %+v, %v", kaputt.Telemetry, err)
+		}
+	}
 }

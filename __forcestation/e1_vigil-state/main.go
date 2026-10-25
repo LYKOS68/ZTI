@@ -22,6 +22,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 )
 
@@ -62,23 +63,69 @@ func (s Status) Valid() bool {
 // 2. ZUSTAND — SharedState
 // ============================================================================
 
-// SharedState ist der gemeinsame Zustand nach ABCD.yaml (shared_state.schema).
+// SharedState ist der gemeinsame Zustand nach ZOOM+SEK.yaml
+// (shared_state_matrix.schema = ABCD.yaml shared_state.schema + telemetry).
 // Ungültige Werte aus der Datei bleiben darstellbar, damit Check() sie
 // erkennen und Heal() sie reparieren kann: Tick < 0 steht für "kein int ≥ 0",
 // LatencyMs NaN für "keine Zahl".
 type SharedState struct {
-	Data      any     `json:"data"`
-	Hash      *string `json:"hash"`
-	LatencyMs float64 `json:"latency_ms"`
-	History   []any   `json:"history"`
-	Status    Status  `json:"status"`
-	Tick      int64   `json:"tick"`
+	Data      any       `json:"data"`
+	Hash      *string   `json:"hash"`
+	LatencyMs float64   `json:"latency_ms"`
+	History   []any     `json:"history"`
+	Status    Status    `json:"status"`
+	Tick      int64     `json:"tick"`
+	Telemetry Telemetry `json:"telemetry"`
 
 	// Dateiwerte mit falschem Typ, für reset_von und capture; sonst leer.
 	rawTick   rawJSON
 	rawStatus rawJSON
-	// hash ist weder null noch String bzw. history ist keine Liste.
-	badHash, badHistory bool
+	// hash ist weder null noch String, history keine Liste, telemetry kein
+	// Objekt mit genau den vier Feldern in den richtigen Typen.
+	badHash, badHistory, badTelemetry bool
+}
+
+// Telemetry: wo (Sektion, Zoom) und wer (Operator) zuletzt gehandelt hat.
+type Telemetry struct {
+	Sektion        string `json:"sektion"`
+	Zoom           string `json:"zoom"`
+	ActiveOperator string `json:"active_operator"`
+	LastBit        *int   `json:"last_bit"`
+}
+
+// NewTelemetry ist der Startwert aus shared_state_matrix.schema.
+func NewTelemetry() Telemetry {
+	return Telemetry{Sektion: "S1", Zoom: "MAKRO", ActiveOperator: "ALPHA"}
+}
+
+// sektionen: zugeordnete Zoom-Ebenen und dominante Operatoren je Sektion,
+// aus ABCD.yaml sektionen = ZOOM+SEK.yaml sektionen_mit_zoom_und_operatoren (G2).
+var sektionen = map[string]struct{ zoom, ops []string }{
+	"S1": {[]string{"META", "MAKRO"}, []string{"ALPHA", "CHARLIE"}},
+	"S2": {[]string{"MAKRO", "MESO"}, []string{"ALPHA", "DELTA"}},
+	"S3": {[]string{"MESO", "MIKRO"}, []string{"BRAVO"}},
+	"S4": {[]string{"MIKRO", "NANO"}, []string{"CHARLIE", "DELTA"}},
+	"S5": {[]string{"META"}, []string{"ALPHA", "BRAVO", "CHARLIE", "DELTA"}},
+}
+
+// Check ist I10 aus ZOOM+SEK.yaml: (sektion, zoom, active_operator) ist eine
+// gültige Kombination laut sektionen; last_bit ist null, 0 oder 1.
+func (t Telemetry) Check() error {
+	sek, ok := sektionen[t.Sektion]
+	if !ok {
+		return fmt.Errorf("telemetry.sektion %q nicht in S1..S5", t.Sektion)
+	}
+	if !slices.Contains(sek.zoom, t.Zoom) {
+		return fmt.Errorf("telemetry.zoom %q gehört nicht zu %s %v", t.Zoom, t.Sektion, sek.zoom)
+	}
+	if !slices.Contains(sek.ops, t.ActiveOperator) {
+		return fmt.Errorf("telemetry.active_operator %q gehört nicht zu %s %v",
+			t.ActiveOperator, t.Sektion, sek.ops)
+	}
+	if t.LastBit != nil && *t.LastBit != 0 && *t.LastBit != 1 {
+		return fmt.Errorf("telemetry.last_bit %d ist weder null noch 0/1", *t.LastBit)
+	}
+	return nil
 }
 
 // MarshalJSON schreibt eine fehlende History als [] statt null.
@@ -111,9 +158,9 @@ func (s SharedState) statusWert() any {
 	return s.Status
 }
 
-// NewSharedState ist shared_state.schema aus ABCD.yaml.
+// NewSharedState ist shared_state_matrix.schema aus ZOOM+SEK.yaml.
 func NewSharedState() SharedState {
-	return SharedState{History: []any{}, Status: StatusSleep}
+	return SharedState{History: []any{}, Status: StatusSleep, Telemetry: NewTelemetry()}
 }
 
 func (s SharedState) tickOK() bool { return s.Tick >= 0 }
@@ -145,6 +192,12 @@ func (s SharedState) Check() error {
 		const erlaubt = "{SLEEP, WAKE, UPDATED, CLEAN}"
 		errs = append(errs, fmt.Errorf("%w: status %q nicht in %s", ErrInkonsistent, s.Status, erlaubt))
 	}
+	if s.badTelemetry {
+		const form = "{sektion, zoom, active_operator, last_bit}"
+		errs = append(errs, fmt.Errorf("%w: telemetry muss ein Objekt %s sein", ErrInkonsistent, form))
+	} else if err := s.Telemetry.Check(); err != nil {
+		errs = append(errs, fmt.Errorf("%w: %v", ErrInkonsistent, err))
+	}
 	return errors.Join(errs...)
 }
 
@@ -157,8 +210,8 @@ type ResetVon struct {
 }
 
 // Heal ist der validierte RESET: data und hash leeren, ungültige Felder auf
-// Nullwert, status CLEAN, danach Post-Heal-Validierung. Eine gültige history
-// bleibt erhalten.
+// Nullwert bzw. Startwert, status CLEAN, danach Post-Heal-Validierung. Eine
+// gültige history und eine gültige telemetry bleiben erhalten.
 func (s *SharedState) Heal() (ResetVon, error) {
 	alt := ResetVon{Data: s.Data, Tick: s.tickWert(), Status: s.statusWert()}
 	s.Data = nil
@@ -171,6 +224,9 @@ func (s *SharedState) Heal() (ResetVon, error) {
 	}
 	if s.badHistory || s.History == nil {
 		s.History, s.badHistory = []any{}, false
+	}
+	if s.badTelemetry || s.Telemetry.Check() != nil {
+		s.Telemetry, s.badTelemetry = NewTelemetry(), false
 	}
 	s.Status, s.rawStatus = StatusClean, ""
 	if !s.IsValid() || s.Data != nil {
@@ -203,6 +259,7 @@ func (s SharedState) Capture() Capture {
 
 var stateKeys = map[string]bool{
 	"data": true, "hash": true, "latency_ms": true, "history": true, "status": true, "tick": true,
+	"telemetry": true,
 }
 
 // DecodeState liest ein JSON-Objekt. Falsche Feldtypen sind kein Fehler, sondern
@@ -255,7 +312,46 @@ func DecodeState(b []byte) (SharedState, error) {
 	}
 	s.Status, s.rawStatus = decodeStatus(raw["status"])
 	s.Tick, s.rawTick = decodeTick(raw["tick"])
+	s.Telemetry, s.badTelemetry = decodeTelemetry(raw["telemetry"])
 	return s, nil
+}
+
+// decodeTelemetry verlangt ein Objekt mit genau sektion, zoom und
+// active_operator als String und last_bit als null oder ganze Zahl.
+// Ob die Werte zusammenpassen (I10), prüft erst Telemetry.Check.
+func decodeTelemetry(v json.RawMessage) (Telemetry, bool) {
+	var raw map[string]json.RawMessage
+	if t := bytes.TrimSpace(v); len(t) == 0 || t[0] != '{' || json.Unmarshal(t, &raw) != nil {
+		return Telemetry{}, true
+	}
+	if len(raw) != 4 {
+		return Telemetry{}, true
+	}
+	var t Telemetry
+	for key, ziel := range map[string]*string{
+		"sektion": &t.Sektion, "zoom": &t.Zoom, "active_operator": &t.ActiveOperator,
+	} {
+		s := bytes.TrimSpace(raw[key])
+		if len(s) == 0 || s[0] != '"' || json.Unmarshal(s, ziel) != nil {
+			return Telemetry{}, true
+		}
+	}
+	lb, ok := raw["last_bit"]
+	if !ok {
+		return Telemetry{}, true
+	}
+	if !bytes.Equal(bytes.TrimSpace(lb), []byte("null")) {
+		n, ok := number(lb)
+		if !ok {
+			return Telemetry{}, true
+		}
+		i, err := strconv.Atoi(n.String())
+		if err != nil {
+			return Telemetry{}, true
+		}
+		t.LastBit = &i
+	}
+	return t, false
 }
 
 // decodeAny dekodiert mit json.Number, damit große Zahlen exakt bleiben.
