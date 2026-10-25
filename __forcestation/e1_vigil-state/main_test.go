@@ -50,8 +50,9 @@ func TestCheckMeldetJedeVerletzung(t *testing.T) {
 	}
 }
 
+const zuGross = `99999999999999999999` // > int64
+
 func TestDecodeStateTypen(t *testing.T) {
-	const zuGross = `99999999999999999999` // > int64
 	tests := []struct {
 		name     string
 		body     string
@@ -160,9 +161,64 @@ func TestHeal(t *testing.T) {
 
 func TestCapture(t *testing.T) {
 	got := SharedState{Data: "X", Tick: 2, Status: StatusUpdated}.Capture()
-	want := Capture{LoopTick: 2, LoopStatus: StatusUpdated, LoopData: "X", LoopKonsistent: true}
+	want := Capture{
+		LoopTick:       int64(2),
+		LoopStatus:     StatusUpdated,
+		LoopData:       "X",
+		LoopKonsistent: true,
+	}
 	if got != want {
 		t.Fatalf("Capture() = %+v; want %+v", got, want)
+	}
+}
+
+// TestRohwerte: falsch typisierte Dateiwerte erscheinen unverändert in
+// reset_von und capture; nach Heal sind sie verschwunden.
+func TestRohwerte(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		wantTick   string
+		wantStatus string
+	}{
+		{"tick string", stateJSON(`"7"`, `0`, `"SLEEP"`), `"7"`, `"SLEEP"`},
+		{"tick bool", stateJSON(`true`, `0`, `"SLEEP"`), `true`, `"SLEEP"`},
+		{"tick float", stateJSON(`1.5`, `0`, `"SLEEP"`), `1.5`, `"SLEEP"`},
+		{"tick überlauf", stateJSON(zuGross, `0`, `"SLEEP"`), zuGross, `"SLEEP"`},
+		{"tick objekt", stateJSON(`{"a": 1}`, `0`, `"SLEEP"`), `{"a":1}`, `"SLEEP"`},
+		{"tick negativ bleibt zahl", stateJSON(`-4`, `0`, `"SLEEP"`), `-4`, `"SLEEP"`},
+		{"status zahl", stateJSON(`0`, `0`, `1`), `0`, `1`},
+		{"status null", stateJSON(`0`, `0`, `null`), `0`, `null`},
+		{"status unbekannt bleibt string", stateJSON(`0`, `0`, `"BOOM"`), `0`, `"BOOM"`},
+		{"felder fehlen", `{}`, `null`, `null`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, err := DecodeState([]byte(tt.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			c, _ := json.Marshal(s.Capture())
+			wantCapture := fmt.Sprintf(`"loop_tick":%s,"loop_status":%s,`, tt.wantTick, tt.wantStatus)
+			if !strings.Contains(string(c), wantCapture) {
+				t.Fatalf("capture = %s; want %s", c, wantCapture)
+			}
+
+			alt, err := s.Heal()
+			if err != nil {
+				t.Fatal(err)
+			}
+			r, _ := json.Marshal(alt)
+			wantReset := fmt.Sprintf(`"tick":%s,"status":%s}`, tt.wantTick, tt.wantStatus)
+			if !strings.HasSuffix(string(r), wantReset) {
+				t.Fatalf("reset_von = %s; want …%s", r, wantReset)
+			}
+
+			if s.rawTick != "" || s.rawStatus != "" {
+				t.Fatalf("nach Heal noch Rohwerte: %q, %q", s.rawTick, s.rawStatus)
+			}
+		})
 	}
 }
 
@@ -244,14 +300,14 @@ func TestCLIGuardHeiltInkonsistent(t *testing.T) {
 		t.Fatalf("check = %d %q", code, out)
 	}
 	code, out = runCLI(t, "capture", path)
-	if code != exitInkonsistent || !strings.Contains(out, `"loop_konsistent":false`) {
+	if code != exitInkonsistent || !strings.Contains(out, `"loop_tick":"7"`) {
 		t.Fatalf("capture = %d %q", code, out)
 	}
 	code, out = runCLI(t, "guard", path)
 	if code != exitOK || !strings.Contains(out, "PRE-WAKE") {
 		t.Fatalf("guard = %d %q", code, out)
 	}
-	if !strings.Contains(out, `"data":"VALID_DATA"`) {
+	if !strings.Contains(out, `{"data":"VALID_DATA","tick":"7","status":"BOOM"}`) {
 		t.Fatalf("guard reset_von ohne Vorzustand: %q", out)
 	}
 

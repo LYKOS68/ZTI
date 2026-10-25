@@ -72,6 +72,30 @@ type SharedState struct {
 	Tick      int64   `json:"tick"`
 	LastPulse float64 `json:"last_pulse"`
 	Status    Status  `json:"status"`
+
+	// Dateiwerte mit falschem Typ, für reset_von und capture; sonst leer.
+	rawTick   rawJSON
+	rawStatus rawJSON
+}
+
+// rawJSON ist ein Feldwert, unverändert als JSON-Text aus der Datei.
+type rawJSON string
+
+func (r rawJSON) MarshalJSON() ([]byte, error) { return []byte(r), nil }
+
+// tickWert und statusWert liefern den Wert so, wie er in der Datei stand.
+func (s SharedState) tickWert() any {
+	if s.rawTick != "" {
+		return s.rawTick
+	}
+	return s.Tick
+}
+
+func (s SharedState) statusWert() any {
+	if s.rawStatus != "" {
+		return s.rawStatus
+	}
+	return s.Status
 }
 
 func NewSharedState() SharedState {
@@ -104,24 +128,25 @@ func (s SharedState) Check() error {
 }
 
 // ResetVon ist der Vorzustand, den CharlieGuard vor dem RESET festhält.
+// Tick und Status tragen den Dateiwert, auch wenn dessen Typ falsch war.
 type ResetVon struct {
-	Data   any    `json:"data"`
-	Tick   int64  `json:"tick"`
-	Status Status `json:"status"`
+	Data   any `json:"data"`
+	Tick   any `json:"tick"`
+	Status any `json:"status"`
 }
 
 // Heal ist der validierte RESET (CharlieGuard.process): data leeren, ungültige
 // Felder auf Nullwert, status CLEAN, danach Post-Heal-Validierung.
 func (s *SharedState) Heal() (ResetVon, error) {
-	alt := ResetVon{Data: s.Data, Tick: s.Tick, Status: s.Status}
+	alt := ResetVon{Data: s.Data, Tick: s.tickWert(), Status: s.statusWert()}
 	s.Data = nil
 	if !s.tickOK() {
-		s.Tick = 0
+		s.Tick, s.rawTick = 0, ""
 	}
 	if !s.pulseOK() {
 		s.LastPulse = 0
 	}
-	s.Status = StatusClean
+	s.Status, s.rawStatus = StatusClean, ""
 	if !s.IsValid() || s.Data != nil {
 		return alt, fmt.Errorf("%w (war: %+v)", ErrReset, alt)
 	}
@@ -129,17 +154,18 @@ func (s *SharedState) Heal() (ResetVon, error) {
 }
 
 // Capture ist die Loop-Seite von capture_zustand (zti_runner.py).
+// LoopTick und LoopStatus tragen den Dateiwert, auch wenn dessen Typ falsch war.
 type Capture struct {
-	LoopTick       int64  `json:"loop_tick"`
-	LoopStatus     Status `json:"loop_status"`
-	LoopData       any    `json:"loop_data"`
-	LoopKonsistent bool   `json:"loop_konsistent"`
+	LoopTick       any  `json:"loop_tick"`
+	LoopStatus     any  `json:"loop_status"`
+	LoopData       any  `json:"loop_data"`
+	LoopKonsistent bool `json:"loop_konsistent"`
 }
 
 func (s SharedState) Capture() Capture {
 	return Capture{
-		LoopTick:       s.Tick,
-		LoopStatus:     s.Status,
+		LoopTick:       s.tickWert(),
+		LoopStatus:     s.statusWert(),
 		LoopData:       s.Data,
 		LoopKonsistent: s.IsValid(),
 	}
@@ -173,7 +199,7 @@ func DecodeState(b []byte) (SharedState, error) {
 		}
 	}
 
-	s := SharedState{Tick: -1, LastPulse: math.NaN()}
+	s := SharedState{LastPulse: math.NaN()}
 
 	if v, ok := raw["data"]; ok {
 		d := json.NewDecoder(bytes.NewReader(v))
@@ -182,21 +208,42 @@ func DecodeState(b []byte) (SharedState, error) {
 			return SharedState{}, fmt.Errorf("data: %w", err)
 		}
 	}
-	if n, ok := number(raw["tick"]); ok {
-		if i, err := strconv.ParseInt(n.String(), 10, 64); err == nil {
-			s.Tick = i
-		}
-	}
+	s.Tick, s.rawTick = decodeTick(raw["tick"])
 	if n, ok := number(raw["last_pulse"]); ok {
 		if f, err := n.Float64(); err == nil {
 			s.LastPulse = f
 		}
 	}
-	var st string
-	if err := json.Unmarshal(raw["status"], &st); err == nil {
-		s.Status = Status(st)
-	}
+	s.Status, s.rawStatus = decodeStatus(raw["status"])
 	return s, nil
+}
+
+// decodeTick liefert den int64-Wert, oder -1 und den Rohwert bei falschem Typ.
+func decodeTick(v json.RawMessage) (int64, rawJSON) {
+	if n, ok := number(v); ok {
+		if i, err := strconv.ParseInt(n.String(), 10, 64); err == nil {
+			return i, ""
+		}
+	}
+	return -1, rawOrNull(v)
+}
+
+// decodeStatus liefert den String-Wert, oder "" und den Rohwert bei falschem Typ.
+func decodeStatus(v json.RawMessage) (Status, rawJSON) {
+	t := bytes.TrimSpace(v)
+	var st string
+	if len(t) > 0 && t[0] == '"' && json.Unmarshal(t, &st) == nil {
+		return Status(st), ""
+	}
+	return "", rawOrNull(v)
+}
+
+// rawOrNull gibt ein fehlendes Feld als null aus.
+func rawOrNull(v json.RawMessage) rawJSON {
+	if t := bytes.TrimSpace(v); len(t) > 0 {
+		return rawJSON(t)
+	}
+	return "null"
 }
 
 // number akzeptiert nur JSON-Zahlen: kein bool, kein String, kein null.
