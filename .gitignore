@@ -2,6 +2,7 @@
 __forcestation/t1_pipeline-go/pipeline-go
 __forcestation/e1_vigil-state/vigil
 __forcestation/e2_atomic-pipe/atomicpipe
+__forcestation/e3_chrono-loop/chronoloop
 
 # Reste abgebrochener atomarer Schreibvorgänge
 *.tmp
