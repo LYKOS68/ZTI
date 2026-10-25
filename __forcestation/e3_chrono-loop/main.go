@@ -5,13 +5,17 @@
 // Übergangs-Bit; bei 0 folgt sofort der DROP ohne Fehlerfortpflanzung
 // (ZTI.yaml, kette.regel). Zustand: shared_state.schema aus ABCD.yaml.
 //
-// Rollen (zuordnung.anker + stationen):
+// Rollen nach KANONISCHES-LEXIKON.yaml (universelle Verben, innere Operation
+// IDENT/GENERATE/TRANSFORM/VALIDATE) und zuordnung.anker:
 //
-//	ALPHA   Z  erzeugt:        keine Eingabe → "PING"; Bit 0 bei ungültigem UTF-8
-//	BRAVO   T  transformiert:  trimmt Leerraum; keine Eingabe läuft unverändert durch
-//	CHARLIE I  prüft:          String, getrimmt nicht leer, nicht INVALID/CORRUPT, ≤ 4096 Zeichen
-//	DELTA   S  synthetisiert:  Bit 1 nur, wenn alle drei Worker 1 lieferten und der Zustand
-//	           konsistent ist → APPLY (UPDATED, hash = sha256), sonst RESET (CLEAN)
+//	ALPHA   Z  ERFASSEN:    nimmt die Eingabe auf; Bit 0 bei ungültigem UTF-8 (Wert korrupt)
+//	BRAVO   T  UMFORMEN:    keine Eingabe → erzeugt "PING", sonst trimmt es Leerraum
+//	CHARLIE I  ANWEISEN:    legt die Spezifikation fest, gegen die geprüft wird (das WIE):
+//	                        nicht leer, nicht INVALID/CORRUPT, ≤ 4096 Zeichen
+//	DELTA   S  ENTSCHEIDEN: prüft den Kandidaten gegen CHARLIEs Spezifikation; Bit 1 nur,
+//	                        wenn alle drei Worker 1 lieferten, die Prüfung besteht und der
+//	                        Zustand konsistent ist → APPLY (UPDATED, hash = sha256),
+//	                        sonst RESET (CLEAN, ABCD.yaml step_5)
 //
 //	chronoloop demo
 //	    fester Lauf wie loop.py __main__ (Intervall 0.5 s, Δt 0.3 s, Reihenfolge ABC)
@@ -121,8 +125,20 @@ const (
 	Delta   Layer = "DELTA"
 )
 
+// Spezifikation ist CHARLIEs Anweisung, wie ein gültiger Kandidat aussieht.
+type Spezifikation struct {
+	MaxLen     int
+	Blockliste map[string]bool
+}
+
+// Payload ist der Arbeitskandidat, den die Worker einander übergeben.
+type Payload struct {
+	Wert *string        // nil = keine Eingabe
+	Spez *Spezifikation // nil, bis CHARLIE angewiesen hat
+}
+
 // Worker lesen den Zustand nur (Kopie); schreiben darf allein DELTA.
-type Worker func(p *string, s SharedState) (*string, Bit)
+type Worker func(p Payload, s SharedState) (Payload, Bit)
 
 var workers = map[Layer]Worker{Alpha: alpha, Bravo: bravo, Charlie: charlie}
 
@@ -133,52 +149,60 @@ var reihenfolgen = map[string][3]Layer{
 	"CBA": {Charlie, Bravo, Alpha},
 }
 
-func alpha(p *string, _ SharedState) (*string, Bit) {
-	if p == nil {
-		return ptr("PING"), 1
-	}
-	if !utf8.ValidString(*p) {
+// alpha erfasst: keine Eingabe ist ein gültiger Befund, korruptes UTF-8 nicht.
+func alpha(p Payload, _ SharedState) (Payload, Bit) {
+	if p.Wert != nil && !utf8.ValidString(*p.Wert) {
 		return p, 0
 	}
 	return p, 1
 }
 
-func bravo(p *string, _ SharedState) (*string, Bit) {
-	if p == nil {
-		return nil, 1
+// bravo formt um: erzeugt ohne Eingabe "PING", sonst trimmt es.
+func bravo(p Payload, _ SharedState) (Payload, Bit) {
+	if p.Wert == nil {
+		p.Wert = ptr("PING")
+		return p, 1
 	}
-	return ptr(strings.TrimSpace(*p)), 1
+	p.Wert = ptr(strings.TrimSpace(*p.Wert))
+	return p, 1
 }
 
-const maxLen = 4096
+// standardSpez ist die Anweisung, die CHARLIE erteilt.
+var standardSpez = Spezifikation{
+	MaxLen:     4096,
+	Blockliste: map[string]bool{"INVALID": true, "CORRUPT": true},
+}
 
-var blockliste = map[string]bool{"INVALID": true, "CORRUPT": true}
-
-func charlie(p *string, _ SharedState) (*string, Bit) {
-	if p == nil {
-		return nil, 0
-	}
-	v := strings.TrimSpace(*p)
-	if v == "" || blockliste[v] || utf8.RuneCountInString(v) > maxLen {
-		return p, 0
-	}
+// charlie weist an: legt fest, wie geprüft wird; prüft selbst nicht.
+func charlie(p Payload, _ SharedState) (Payload, Bit) {
+	p.Spez = &standardSpez
 	return p, 1
+}
+
+// erfuellt prüft einen Wert gegen eine Spezifikation.
+func (sp Spezifikation) erfuellt(wert string) bool {
+	v := strings.TrimSpace(wert)
+	return v != "" && !sp.Blockliste[v] && utf8.RuneCountInString(v) <= sp.MaxLen
 }
 
 // ============================================================================
 // 3. SYNTHESIZER — DELTA: SYNTHESIZE → Bit, APPLY, RESET
 // ============================================================================
 
-// synthesize: Bit 1 nur, wenn alle drei Worker gelaufen sind und 1 lieferten,
-// ein Kandidat vorliegt und der Zustand konsistent ist (kein Drift).
-func synthesize(p *string, bits []Bit, s SharedState) Bit {
-	if p == nil || len(bits) != 3 || !s.IsValid() {
+// synthesize entscheidet: Bit 1 nur, wenn alle drei Worker gelaufen sind und
+// 1 lieferten, ein Kandidat und CHARLIEs Spezifikation vorliegen, der Kandidat
+// sie erfüllt und der Zustand konsistent ist (kein Drift).
+func synthesize(p Payload, bits []Bit, s SharedState) Bit {
+	if p.Wert == nil || p.Spez == nil || len(bits) != 3 || !s.IsValid() {
 		return 0
 	}
 	for _, b := range bits {
 		if b != 1 {
 			return 0
 		}
+	}
+	if !p.Spez.erfuellt(*p.Wert) {
+		return 0
 	}
 	return 1
 }
@@ -266,7 +290,7 @@ func (l *ChronoLoop) Zyklus(raw *string) (string, error) {
 	}
 
 	l.State.Tick++
-	p, bits, dropBei := raw, make([]Bit, 0, 4), Delta
+	p, bits, dropBei := Payload{Wert: raw}, make([]Bit, 0, 4), Delta
 	for _, w := range l.Order {
 		var b Bit
 		p, b = workers[w](p, l.State)
@@ -281,8 +305,8 @@ func (l *ChronoLoop) Zyklus(raw *string) (string, error) {
 
 	var res string
 	if bit == 1 {
-		apply(*p, &l.State)
-		res = fmt.Sprintf("TICK %d: EXECUTE (BIT=1) -> State: %q", l.State.Tick, *p)
+		apply(*p.Wert, &l.State)
+		res = fmt.Sprintf("TICK %d: EXECUTE (BIT=1) -> State: %q", l.State.Tick, *p.Wert)
 	} else {
 		if err := reset(&l.State); err != nil {
 			return "", err

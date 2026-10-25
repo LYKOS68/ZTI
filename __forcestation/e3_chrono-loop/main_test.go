@@ -20,7 +20,6 @@ func val(p *string) string {
 
 func TestWorker(t *testing.T) {
 	s := NewSharedState()
-	zuLang := strings.Repeat("a", maxLen+1)
 	tests := []struct {
 		name    string
 		w       Worker
@@ -28,44 +27,76 @@ func TestWorker(t *testing.T) {
 		want    string
 		wantBit Bit
 	}{
-		{"alpha nil → PING", alpha, nil, "PING", 1},
-		{"alpha wert", alpha, ptr(" x "), " x ", 1},
-		{"alpha leer bleibt leer", alpha, ptr(""), "", 1},
+		{"alpha erfasst wert", alpha, ptr(" x "), " x ", 1},
+		{"alpha erfasst keine eingabe", alpha, nil, "<nil>", 1},
+		{"alpha erfasst leere eingabe", alpha, ptr(""), "", 1},
 		{"alpha kaputtes utf8", alpha, ptr("\xff"), "\xff", 0},
+		{"bravo erzeugt PING", bravo, nil, "PING", 1},
 		{"bravo trimmt", bravo, ptr("  x \n"), "x", 1},
-		{"bravo nil läuft durch", bravo, nil, "<nil>", 1},
-		{"charlie gültig", charlie, ptr(" VALID "), " VALID ", 1},
-		{"charlie nil", charlie, nil, "<nil>", 0},
-		{"charlie leer", charlie, ptr("  "), "  ", 0},
-		{"charlie blockliste", charlie, ptr(" INVALID "), " INVALID ", 0},
-		{"charlie blockliste case", charlie, ptr("invalid"), "invalid", 1},
-		{"charlie max", charlie, ptr(strings.Repeat("ä", maxLen)), strings.Repeat("ä", maxLen), 1},
-		{"charlie zu lang", charlie, ptr(zuLang), zuLang, 0},
+		{"charlie lässt wert unverändert", charlie, ptr(" INVALID "), " INVALID ", 1},
+		{"charlie ohne eingabe", charlie, nil, "<nil>", 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, bit := tt.w(tt.in, s)
-			if val(got) != tt.want || bit != tt.wantBit {
-				t.Fatalf("= %.20q, %d; want %.20q, %d", val(got), bit, tt.want, tt.wantBit)
+			got, bit := tt.w(Payload{Wert: tt.in}, s)
+			if val(got.Wert) != tt.want || bit != tt.wantBit {
+				t.Fatalf("= %q, %d; want %q, %d", val(got.Wert), bit, tt.want, tt.wantBit)
 			}
 		})
 	}
 }
 
+func TestCharlieWeistAn(t *testing.T) {
+	p, _ := charlie(Payload{}, NewSharedState())
+	if p.Spez == nil || p.Spez.MaxLen != 4096 || !p.Spez.Blockliste["CORRUPT"] {
+		t.Fatalf("Spez = %+v", p.Spez)
+	}
+	for _, w := range []Worker{alpha, bravo} {
+		if q, _ := w(Payload{Wert: ptr("x")}, NewSharedState()); q.Spez != nil {
+			t.Fatal("nur CHARLIE darf anweisen")
+		}
+	}
+}
+
+func TestSpezifikationErfuellt(t *testing.T) {
+	tests := []struct {
+		wert string
+		want bool
+	}{
+		{"VALID_DATA", true},
+		{"  x  ", true},
+		{"", false},
+		{" \t\n", false},
+		{"INVALID", false},
+		{" CORRUPT ", false},
+		{"invalid", true}, // Blockliste ist case-sensitiv
+		{strings.Repeat("ä", 4096), true},
+		{strings.Repeat("a", 4097), false},
+	}
+	for _, tt := range tests {
+		if got := standardSpez.erfuellt(tt.wert); got != tt.want {
+			t.Errorf("erfuellt(%.20q) = %v; want %v", tt.wert, got, tt.want)
+		}
+	}
+}
+
 func TestSynthesize(t *testing.T) {
 	ok := NewSharedState()
+	kandidat := func(w string) Payload { return Payload{Wert: ptr(w), Spez: &standardSpez} }
 	tests := []struct {
 		name string
-		p    *string
+		p    Payload
 		bits []Bit
 		s    SharedState
 		want Bit
 	}{
-		{"alles 1", ptr("x"), []Bit{1, 1, 1}, ok, 1},
-		{"ein worker 0", ptr("x"), []Bit{1, 0, 1}, ok, 0},
-		{"nicht alle gelaufen", ptr("x"), []Bit{1, 1}, ok, 0},
-		{"kein kandidat", nil, []Bit{1, 1, 1}, ok, 0},
-		{"zustand gedriftet", ptr("x"), []Bit{1, 1, 1}, SharedState{Status: "BOOM"}, 0},
+		{"alles 1", kandidat("x"), []Bit{1, 1, 1}, ok, 1},
+		{"prüfung scheitert", kandidat("INVALID"), []Bit{1, 1, 1}, ok, 0},
+		{"ein worker 0", kandidat("x"), []Bit{1, 0, 1}, ok, 0},
+		{"nicht alle gelaufen", kandidat("x"), []Bit{1, 1}, ok, 0},
+		{"kein kandidat", Payload{Spez: &standardSpez}, []Bit{1, 1, 1}, ok, 0},
+		{"keine anweisung", Payload{Wert: ptr("x")}, []Bit{1, 1, 1}, ok, 0},
+		{"zustand gedriftet", kandidat("x"), []Bit{1, 1, 1}, SharedState{Status: "BOOM"}, 0},
 	}
 	for _, tt := range tests {
 		if got := synthesize(tt.p, tt.bits, tt.s); got != tt.want {
@@ -84,10 +115,11 @@ func TestReihenfolgen(t *testing.T) {
 		{"BCA", "  x ", `EXECUTE (BIT=1) -> State: "x"`, []Bit{1, 1, 1, 1}},
 		{"CBA", "  x ", `EXECUTE (BIT=1) -> State: "x"`, []Bit{1, 1, 1, 1}},
 		{"ABC", "", `EXECUTE (BIT=1) -> State: "PING"`, []Bit{1, 1, 1, 1}},
-		// BRAVO lässt nil durch, CHARLIE verwirft:
-		{"BCA", "", "RESET (BIT=0, DROP bei CHARLIE)", []Bit{1, 0, 0}},
-		{"CBA", "", "RESET (BIT=0, DROP bei CHARLIE)", []Bit{0, 0}},
-		{"ABC", "INVALID", "RESET (BIT=0, DROP bei CHARLIE)", []Bit{1, 1, 0, 0}},
+		{"BCA", "", `EXECUTE (BIT=1) -> State: "PING"`, []Bit{1, 1, 1, 1}},
+		{"CBA", "", `EXECUTE (BIT=1) -> State: "PING"`, []Bit{1, 1, 1, 1}},
+		{"ABC", "INVALID", "RESET (BIT=0, DROP bei DELTA)", []Bit{1, 1, 1, 0}},
+		{"CBA", " CORRUPT ", "RESET (BIT=0, DROP bei DELTA)", []Bit{1, 1, 1, 0}},
+		{"ABC", "\xff", "RESET (BIT=0, DROP bei ALPHA)", []Bit{0, 0}},
 		{"CBA", "\xff", "RESET (BIT=0, DROP bei ALPHA)", []Bit{1, 1, 0, 0}},
 	}
 	for _, tt := range tests {
@@ -193,7 +225,7 @@ func TestDemo(t *testing.T) {
 [Step 2] t=0.3 Status: SLEEP   | SLEEP
 [Step 3] t=0.6 Status: UPDATED | TICK 1: EXECUTE (BIT=1) -> State: "VALID_DATA"
 [Step 4] t=0.9 Status: SLEEP   | SLEEP
-[Step 5] t=1.2 Status: CLEAN   | TICK 2: RESET (BIT=0, DROP bei CHARLIE)
+[Step 5] t=1.2 Status: CLEAN   | TICK 2: RESET (BIT=0, DROP bei DELTA)
 [Step 6] t=1.5 Status: SLEEP   | SLEEP
 `
 	if out.String() != want {
@@ -210,7 +242,7 @@ func TestRunStdin(t *testing.T) {
 	}
 	want := `[Step 1] t=0.0 Status: UPDATED | TICK 1: EXECUTE (BIT=1) -> State: "hallo"
 [Step 2] t=1.0 Status: SLEEP   | SLEEP
-[Step 3] t=2.0 Status: CLEAN   | TICK 2: RESET (BIT=0, DROP bei CHARLIE)
+[Step 3] t=2.0 Status: CLEAN   | TICK 2: RESET (BIT=0, DROP bei DELTA)
 `
 	if out.String() != want {
 		t.Fatalf("\n got:\n%s\nwant:\n%s", out.String(), want)
@@ -233,7 +265,7 @@ func TestStepDatei(t *testing.T) {
 		{[]string{"step", path, " VALID_DATA "}, `TICK 1: EXECUTE (BIT=1) -> State: "VALID_DATA"`},
 		// step ist immer WAKE, ohne Eingabe also PING:
 		{[]string{"step", path}, `UPDATED | TICK 2: EXECUTE (BIT=1) -> State: "PING"`},
-		{[]string{"step", "-order", "BCA", path}, "CLEAN   | TICK 3: RESET (BIT=0, DROP bei CHARLIE)"},
+		{[]string{"step", "-order", "BCA", path, "INVALID"}, "TICK 3: RESET (BIT=0, DROP bei DELTA)"},
 	}
 	for _, st := range steps {
 		code, out := runCLI(t, st.args...)
@@ -254,14 +286,14 @@ func TestStepDatei(t *testing.T) {
 	if err := json.Unmarshal(m["history"], &hist); err != nil || len(hist) != 3 {
 		t.Fatalf("history = %s", m["history"])
 	}
-	if !reflect.DeepEqual(hist[2].Bits, []Bit{1, 0, 0}) || hist[2].Reihenfolge != "BCAD" {
+	if !reflect.DeepEqual(hist[2].Bits, []Bit{1, 1, 1, 0}) || hist[2].Reihenfolge != "BCAD" {
 		t.Fatalf("history[2] = %+v", hist[2])
 	}
 	var kompakt bytes.Buffer
 	if err := json.Compact(&kompakt, m["history"]); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(kompakt.String(), `"bits":[1,0,0]`) {
+	if !strings.Contains(kompakt.String(), `"bits":[1,1,1,0]`) {
 		t.Fatalf("bits müssen als Zahlenliste erscheinen: %s", kompakt.String())
 	}
 }
