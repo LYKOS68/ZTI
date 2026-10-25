@@ -1,0 +1,288 @@
+# MINIMAL-CORE-ARCHITEKTUR (SES) v6
+# Verbesserte Version = MINIMAL-CORE v4 + universelle Verben (RO-Material).
+# Gesetz: lexikalische Geschlossenheit. Trägerform != Rolle. ZTIS ist das kleinste vollständige Objekt.
+# GATE: Das Gate ist die 0/1-Entscheidung. 3+1 ist die Operation, die innerhalb dieser Entscheidung abläuft.
+# 0/1 ist selbst ein vollständiges kleines 3+1-Objekt (Rekursion).
+# UNIVERSALLE VERBEN: erfassen (Z), umformen (T), anweisen (I), entscheiden (S).
+# Supersedes: ses/minimal-core/v4, DATEI-GRAMMATIK.md (als kanonische Strukturform).
+# v6: ZOOM aus direktive herausgelöst (zoom_zuordnung: Zuordnung statt Identität);
+#     Achsen sind nur in ABCD.yaml, ZTI.yaml, ZOOM+SEK.yaml (ebenen_gesetz) definiert.
+
+meta:
+  schema: ses/minimal-core/v6
+  version: 6
+  zweck: "Minimaler gemeinsamer Kern aller SES-Bestandteile - Objekt, Wörterbuch und Gesetz in einer Einheit"
+  entwicklungsvertrag: "01_spezifikationen/ENTWICKLUNGSVERTRAG.md"
+  zugriffsordnung: "01_spezifikationen/LOCK_ORDER.md"
+  kanon_dateien:
+    - "01_spezifikationen/ABCD.yaml"
+    - "01_spezifikationen/ZTI.yaml"
+    - "01_spezifikationen/ZOOM+SEK.yaml"
+  gesetz: "lexikalische Geschlossenheit"
+  supersedes:
+    - "ses/minimal-core/v4"
+    - "ses/minimal-core/v5"
+    - "DATEI-GRAMMATIK.md"
+  basis:
+    - "opencode.txt"
+    - "claude-cli.txt"
+    - "2026-09-12_hermes-audit.md"
+    - "meineworte.md / meine-worte1.md"
+    - "ses/lexikon/v5"
+    - "RO-Direktive: Gate (0/1-Entscheidung) vs. 3+1 (Operation darin)"
+    - "RO-Material: META_PROMPT_GENERATOR + Formschablonen (universelle Verben)"
+  sprache: de
+
+direktive:
+  Z: "ZUSTAND"
+  T: "TRANSFORMATION"
+  I: "INFORMATION"
+  S: "SYNPOINT"
+  GESETZ:
+    einheit: "ZTIS"
+    ohne_Z: "kein_T"
+    ohne_T: "kein_Delta"
+    ohne_I: "keine_gerichtete_Transformation"
+    ohne_S: "keine_gebundene_Einheit"
+  REKURSION:
+    Z: "ZTIS"
+    T: "ZTIS"
+    I: "ZTIS"
+    S: "ZTIS"
+  BEGRIFF:
+    name: ""
+    funktion: "Z | T | I | S"
+    zoom: "Meso | Makro | Mikro | Meta_Nano"
+    bindung: "ZTIS"
+
+# ZUORDNUNG (keine Identität): Zoom-Stufe (3+1, reduziert) -> Säule.
+# Quelle: ABCD.yaml zuordnung.anker. Die Zoom-Achse selbst ist nur in ZOOM+SEK.yaml (ebenen_gesetz) definiert.
+zoom_zuordnung:
+  Meso: "Z"
+  Makro: "T"
+  Mikro: "I"
+  Meta_Nano: "S"
+
+kern_3_plus_1:
+  zustand:
+    layer: 1
+    begriff: "Nomen / WAS / SEIN"
+    frage: "Welche Datei traegt welchen Zustand?"
+  transformation:
+    layer: 2
+    begriff: "Verb / TUN"
+    frage: "Welche Transformation erzeugt oder aendert sie?"
+  information:
+    layer: 3
+    begriff: "Adjektiv / WIE / INFORMATION"
+    frage: "Welche Information repraesentiert der Inhalt?"
+  syncpunkt:
+    layer: "+1"
+    begriff: "Grammatik / Bindung"
+    frage: "Welcher Syncpunkt macht sie verbindlich?"
+
+ontologische_einheit:
+  aussage: "Operator, Zustand, Transformation, Information und +1 sind dieselbe Einheit - nur andere Worte."
+  immer_3_plus_1_gleichzeitig: true
+
+gate:
+  entscheidung: "PASST REIN?"
+  domaene: "0 / 1"
+  ist_selbst: "ein vollstaendiges 3+1 - 0/1 ist die kleinste operative Einheit des Gates"
+  nicht: "keine starre Pipeline auf der oberen Ebene (IDENT->GENERATE->TRANSFORM->VALIDATE ist nicht der Ablauf des Ganzen)"
+  innere_operation_3_plus_1:
+    schritt_1: "IDENT"
+    schritt_2: "GENERATE"
+    schritt_3: "TRANSFORM"
+    syncpunkt: "VALIDATE"
+    notiz: "Reihenfolge frei (BCDA-Regel); konkrete Funktions-Zuordnung (Z/T/I/S) von RO zu bestaetigen"
+  trennung:
+    gate_ist: "die 0/1-Entscheidungsdomaene (binär)"
+    drei_plus_1_ist: "die vollstaendige Operation innerhalb dieser Domaene"
+    nicht_vermischen: "0/1 (Entscheidung) und 3+1 (Verarbeitung) sind zwei getrennte Aussagen"
+  zeitbetrachtung:
+    anfang_mitte_ende: "keine eigene zusaetzliche Ebene - 3x(3+1) ist Betrachtungsoption, keine neue Schicht"
+
+universelle_verben:
+  Z: "ERFASSEN - erfassen, erkennen, analysieren"
+  T: "UMFORMEN - umformen, erzeugen, bewegen"
+  I: "ANWEISEN - anweisen, formen, spezifizieren (das WIE)"
+  S: "ENTSCHEIDEN - entscheiden, validieren (das Tor, STOP_RULE, Rueckkopplung)"
+  gesetz: "Die vier Zwecke jeder Kette (information, transformation, execution_instruction, decision) und die innere Operation des 0/1 (IDENT, GENERATE, TRANSFORM, VALIDATE) sind dieselben Verben - Wortschatz, keine neuen Saeulen."
+
+# ZUORDNUNG (keine Identität) Zoom -> Rolle, siehe zoom_zuordnung; Definition der Zoom-Achse: ZOOM+SEK.yaml (ebenen_gesetz).
+groessenebenen:
+  meta_nano:
+    entspricht: "Sprache / DELTA / +1"
+    rolle: "Wächter, Syncpoint; bindet ZTI"
+    ist_selbst: "ein vollstaendiges ZTIS"
+  meso:
+    entspricht: "Nomen / ZUSTAND"
+    ist_selbst: "ein eigenes ZTIS, nur fuer den ALPHA-Zustandsbereich"
+  makro:
+    entspricht: "Verb / TRANSFORMATION"
+    ist_selbst: "ein eigenes ZTIS"
+  mikro:
+    entspricht: "Adjektiv / INFORMATION"
+    ist_selbst: "ein eigenes ZTIS"
+
+blick_stufe:
+  aktuell: "META/NANO"
+  bedeutung: "Betrachtung aus allem-gesamt, so klein wie moeglich, aber ALLES."
+
+lexikon_gesetz:
+  lexikalische_geschlossenheit: true
+  syncpoint_ist_die_funktion: true
+  gültig_erst_wenn: "Begriff -> Funktion -> ZTIS eindeutig"
+  keine_zuordnung: "bleibt offen"
+  mehrere_zuordnungen: "konkrete Zoomstufe bestimmen, dann eindeutig"
+  neuer_begriff_keine_neue_saeule: true
+  anker:
+    ALPHA: "Z"
+    BRAVO: "T"
+    CHARLIE: "I"
+    DELTA: "S"
+
+prinzipien:
+  traegerform_ist_nicht_rolle: true
+  rolle_aus_inhalt_und_nutzung: true
+  ordner_ist_externes_gedaechtnis: true
+  keine_persistenz_ohne_datei: true
+  datei_verbindlich_nur_mit_syncpunkt: true
+  immer_3_plus_1_gleichzeitig: true
+  ontologische_einheit_der_ebenen: true
+  rekursion_auf_jeder_groessenebene: true
+  worte_tauschen_algorithmus_bleibt: true
+
+traeger:
+  - endung: ".md"
+    rolle: "deklarativ (Beschreibung, Regeln, Konzept, Handoff, Anleitung)"
+    lesbar: true
+    schreibbar: true
+    ausfuehrbar: false
+    binaer: false
+    pruefung: "existiert, groesse_gt_0, hash_sha256"
+  - endung: ".json"
+    rolle: "strukturierter Zustand / maschinenlesbare Information"
+    lesbar: true
+    schreibbar: true
+    ausfuehrbar: false
+    binaer: false
+    pruefung: "parsebar (valid json), groesse_gt_0, readback"
+  - endung: ".jsonl"
+    rolle: "append-Log (Log, Entscheidung, Nachweis, Aenderung)"
+    lesbar: true
+    schreibbar: true
+    ausfuehrbar: false
+    binaer: false
+    pruefung: "zeilenweise parsebar, append-only"
+  - endung: ".yaml"
+    rolle: "Konfiguration / Architektur-Deklaration"
+    lesbar: true
+    schreibbar: true
+    ausfuehrbar: false
+    binaer: false
+    pruefung: "parsebar (yaml)"
+  - endung: ".py"
+    rolle: "ausfuehrbare Transformation"
+    lesbar: true
+    schreibbar: true
+    ausfuehrbar: true
+    binaer: false
+    pruefung: "exit_code_0"
+  - endung: ".ps1"
+    rolle: "ausfuehrbare Transformation (PowerShell)"
+    lesbar: true
+    schreibbar: true
+    ausfuehrbar: true
+    binaer: false
+    pruefung: "exit_code_0"
+  - endung: ".sh"
+    rolle: "ausfuehrbare Transformation (Shell/Unix)"
+    lesbar: true
+    schreibbar: true
+    ausfuehrbar: true
+    binaer: false
+    pruefung: "exit_code_0"
+  - endung: ".txt"
+    rolle: "flacher/roher Text, Eingang"
+    lesbar: true
+    schreibbar: true
+    ausfuehrbar: false
+    binaer: false
+    pruefung: "existiert, groesse_gt_0"
+  - endung: ".csv"
+    rolle: "tabellenfoermige Daten"
+    lesbar: true
+    schreibbar: true
+    ausfuehrbar: false
+    binaer: false
+    pruefung: "existiert, groesse_gt_0"
+  - endung: ".html"
+    rolle: "Darstellung / Output"
+    lesbar: true
+    schreibbar: true
+    ausfuehrbar: false
+    binaer: false
+    pruefung: "existiert, groesse_gt_0"
+  - endung: "binaer (jpg/pdf/docx/xlsx)"
+    rolle: "Beleg, nur lesen/kopieren"
+    lesbar: true
+    schreibbar: false
+    ausfuehrbar: false
+    binaer: true
+    pruefung: "existiert, groesse_gt_0"
+
+datei_rollen_fragen:
+  zustand: "Welche Datei traegt welchen Zustand?"
+  transformation: "Welche Transformation erzeugt oder aendert sie (und wer schreibt sie)?"
+  information: "Welche Information repraesentiert der Inhalt?"
+  syncpunkt: "Welcher Syncpunkt macht sie verbindlich?"
+
+syncpunkt:
+  kriterien:
+    - existiert
+    - groesse_gt_0
+    - pfad_absolut
+    - parsebar
+    - exit_code_0
+    - hash_sha256
+    - readback
+    - ehrlich_markiert_unknown
+  regel: "Eine Datei ist nur verbindlich, wenn mindestens ein Kriterium messbar erfuellt ist."
+  waechter_ist_selbst_ztis: true
+
+beispiel_anwendung:
+  - datei: "session/project_state.json"
+    traeger: ".json"
+    rolle: "zustand"
+  - datei: "session/session_state.json"
+    traeger: ".json"
+    rolle: "zustand + syncpunkt"
+  - datei: "session/transitions.jsonl"
+    traeger: ".jsonl"
+    rolle: "transformation-log"
+  - datei: "session/decisions.jsonl"
+    traeger: ".jsonl"
+    rolle: "information-entscheidung"
+  - datei: "session/traceability.jsonl"
+    traeger: ".jsonl"
+    rolle: "information-nachweis"
+  - datei: "session/changelog.jsonl"
+    traeger: ".jsonl"
+    rolle: "sync-log"
+  - datei: "10_output/KOMMUNIKATIONSREGELN.md"
+    traeger: ".md"
+    rolle: "deklarativ-regeln"
+  - datei: "10_output/OPERATIONSANLEITUNG.md"
+    traeger: ".md"
+    rolle: "deklarativ-anleitung"
+  - datei: "10_output/KANONISCHES-LEXIKON.yaml"
+    traeger: ".yaml"
+    rolle: "konfiguration-lexikon (ses/lexikon/v4)"
+  - datei: "10_output/DATEI-GRAMMATIK.md"
+    traeger: ".md"
+    rolle: "deklarativ-grammatik (superseded durch ses/minimal-core/v5)"
+  - datei: "10_output/MINIMAL-CORE.yaml"
+    traeger: ".yaml"
+    rolle: "konfiguration-architektur (diese Datei, ses/minimal-core/v5)"

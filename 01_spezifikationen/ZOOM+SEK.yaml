@@ -1,0 +1,168 @@
+name: "zti-core-system"
+version: "1.3.0"
+spec: "ORGANIC-SECTION-ZOOM-OPERATOR-CORE"
+
+# EBENEN-GESETZ: in allen Kanon-Dateien identisch (Gleichheit wird geprüft, Invariante G1).
+ebenen_gesetz:
+  gesetz_der_reinen_ebenen: "Keine Vermischung von Raum (Zoom), Zeit (Sektion), Handlung (Operator) und Zustand (State)."
+  achsen:
+    saeule:
+      dimension: ONTISCH
+      frage: "WAS ist es"
+      ids: [Z, T, I, S]
+    layer:
+      dimension: HANDLUNG
+      frage: "WER handelt"
+      ids: [ALPHA, BRAVO, CHARLIE, DELTA]
+    zoom:
+      dimension: RAUM
+      frage: "WO steht der Blick"
+      ids: [META, MAKRO, MESO, MIKRO, NANO]
+      reduktion:
+        # 5 -> 3+1, kein Detailverlust: META und NANO bündeln zur +1-Ebene
+        MESO: MESO
+        MAKRO: MAKRO
+        MIKRO: MIKRO
+        META: META_NANO
+        NANO: META_NANO
+    sektion:
+      dimension: ZEIT
+      frage: "WANN im Zyklus"
+      ids: [S1, S2, S3, S4, S5]
+    delta:
+      dimension: VALIDATOR
+      frage: "DARF gebunden werden"
+      ids: [0, 1]
+  regeln:
+    1: "Eine Frage pro Achse."
+    2: "Definiert wird nur in ebenen_gesetz.achsen; alle anderen Blöcke verweisen per ID."
+    3: "Raum, Zeit und Handlung sind getrennte Achsen: Zoom = Position, Sektion = Zyklusphase, Layer = Rolle."
+    4: "Zuordnungen zwischen Achsen (zum Beispiel ALPHA <-> MESO) stehen in eigenen Tabellen, nie als Identität in einer Achse."
+    5: "Jede Sektion ist rekursiv ein Sub-Zyklus mit eigenen S1..S5 eine Ebene tiefer."
+
+begriffstrennung_und_gesetze:
+  # gesetz_der_reinen_ebenen steht jetzt einmal in ebenen_gesetz (Regel 2: nur eine Definition)
+  definitionen:
+    zoom_ebene: "Die räumliche Skala / Auflösung (Meta, Makro, Meso, Mikro, Nano)."
+    sektion: "Die zeitliche Lebenszyklus-Phase (S1 bis S5)."
+    operator: "Die spezifische Handlungsrolle des Agenten (Alpha, Bravo, Charlie, Delta)."
+    base2_gate: "Die binäre 1-Bit-Entscheidung (0 = Reset/Clean, 1 = Commit/Updated)."
+
+sektionen_mit_zoom_und_operatoren:
+  - id: S1
+    name: "MATERIALBESCHAFFUNG_FORMALANALYSE"
+    fokus: "Eingaberaum & Zielform"
+    zugeordnete_zoom_ebenen: [META, MAKRO]
+    dominante_operatoren: [ALPHA, CHARLIE]
+    funktion: "Alpha erfasst Rohstoff und Quellen; Charlie validiert die formale Zieldefinition."
+    gate_bedingung: "Materialmenge vollständig und Zielschema eindeutig."
+  - id: S2
+    name: "STRATEGISCHE_STRUKTURIERUNG"
+    fokus: "Ordnung, Architektur & Schnittstellen"
+    zugeordnete_zoom_ebenen: [MAKRO, MESO]
+    dominante_operatoren: [ALPHA, DELTA]
+    funktion: "Alpha entwirft Schnittstellen und Module; Delta integriert die Gesamtreihenfolge."
+    gate_bedingung: "Abhängigkeiten zyklenfrei und Ausführungspfad messbar."
+  - id: S3
+    name: "OPERATIVE_UMSETZUNG"
+    fokus: "Produktion & Realisierung"
+    zugeordnete_zoom_ebenen: [MESO, MIKRO]
+    dominante_operatoren: [BRAVO]
+    funktion: "Bravo baut Modul für Modul und Zeile für Zeile den ausführbaren Code."
+    gate_bedingung: "Artefakt existiert real und ist direkt lauffähig."
+  - id: S4
+    name: "KRITISCHE_REVISION_INTEGRATION"
+    fokus: "QS, Härtung & Fehlerkorrektur"
+    zugeordnete_zoom_ebenen: [MIKRO, NANO]
+    dominante_operatoren: [CHARLIE, DELTA]
+    funktion: "Charlie prüft Nano-Details und Assertions; Delta schließt Brüche und heilt den State."
+    gate_bedingung: "Kritische Fehler = 0, alle Invarianten-Checks bestanden."
+  - id: S5
+    name: "FINALISIERUNG_WIRKUNG"
+    fokus: "Release, Bindung & Zyklusabschluss"
+    zugeordnete_zoom_ebenen: [META]
+    dominante_operatoren: [ALPHA, BRAVO, CHARLIE, DELTA]
+    funktion: "Alle Operatoren wirken vereint zur Abnahme, Wirkungsmessung und finalen Bindung."
+    gate_bedingung: "Gesamtwirkung nachgewiesen, Zyklus deterministisch auf STOP gesetzt."
+
+chat_header_versionen:
+  version_1_inline:
+    syntax: "[SEKTION: {S1-S5}] [ZOOM: {META-NANO}] [OP: {ABCD}] [GATE: {0|1}]"
+    beispiele:
+      - "[SEKTION: S1 (Material)] [ZOOM: MAKRO] [OP: ALPHA (Erfassen)] [GATE: 1-BIT]"
+      - "[SEKTION: S3 (Umsetzung)] [ZOOM: MIKRO] [OP: BRAVO (Bauen)] [GATE: 1-BIT]"
+      - "[SEKTION: S4 (Revision)] [ZOOM: NANO] [OP: CHARLIE (Prüfen)] [GATE: 0-BIT (RESET)]"
+    einsatz: "Standard-Telemetrie über jeder operativen Nachricht."
+  version_2_matrix_box:
+    syntax: |
+      ┌─ SEKTION: {S1-S5} ({NAME}) ────────────── ZOOM: {LEVELS} ({FOKUS}) ─┐
+      │ OPERATOREN: {AKTIV} ────── STATUS: {STATUS} ────── BIT: {0|1} ({RESULT}) │
+      └──────────────────────────────────────────────────────────────────────────┘
+    beispiele:
+      - |
+        ┌─ SEKTION: S2 (Struktur) ──────────────── ZOOM: MAKRO/MESO (Architektur) ─┐
+        │ OPERATOR: DELTA (Synthese) ────── STATUS: WAKE ────── BIT: 1 (LOCKED)    │
+        └──────────────────────────────────────────────────────────────────────────┘
+      - |
+        ┌─ SEKTION: S5 (Finalisierung) ─────────── ZOOM: META (Gesamtwirkung) ─────┐
+        │ OPERATOREN: A+B+C+D (Release) ─── STATUS: CLEAN ───── BIT: 1 (CYCLE_STOP)│
+        └──────────────────────────────────────────────────────────────────────────┘
+    einsatz: "Bei Sektionswechseln, Architektur-Meilensteinen und Gate-Entscheidungen."
+
+abcd_agent_loop_3_plus_1:
+  basis_prinzip: "Drei Worker erzeugen die Kette (+3), Agent D erzwingt die Synthese und das Gate (+1)."
+  die_drei_stationen:
+    definition: "Beliebige Permutation aus drei Stufen vor der Synthese"
+    muster:
+      - "ALPHA -> BRAVO -> CHARLIE -> DELTA"
+      - "BRAVO -> CHARLIE -> ALPHA -> DELTA"
+      - "CHARLIE -> BRAVO -> ALPHA -> DELTA"
+    aufgabe: "Erzeugen, Modifizieren und Vorprüfen des Arbeitskandidaten im State."
+  der_plus_eins_uebergang_delta:
+    operator: DELTA
+    funktion: "Synthese aller drei Vorstufen und Auslösen der Base-2 Schranke."
+    base2_schranke:
+      bit_0:
+        signal: "REJECT / RESET"
+        ausfuehrung: "CHARLIE.RESET(state) -> STATE = CLEAN"
+        wirkung: "Invariante verletzt oder Störfall. Keine persistente Änderung."
+      bit_1:
+        signal: "COMMIT / EXECUTE"
+        ausfuehrung: "DELTA.APPLY(payload, state) -> STATE = UPDATED"
+        wirkung: "Synthese bestätigt. Monotone Übernahme des neuen Zustands."
+
+shared_state_matrix:
+  schema:
+    data: null
+    hash: null
+    latency_ms: 0.0
+    history: []
+    status: "SLEEP"
+    tick: 0
+    telemetry:
+      sektion: S1
+      zoom: MAKRO
+      active_operator: ALPHA
+      last_bit: null
+  status_werte: [SLEEP, WAKE, UPDATED, CLEAN]
+  invariante: "assert(tick >= 0 and status in ['SLEEP', 'WAKE', 'UPDATED', 'CLEAN'])"
+
+# Widersprüche, die ich NICHT aufgelöst habe (Entscheidung liegt bei dir):
+offen:
+  O1: "bit_0 wird hier von CHARLIE.RESET ausgeführt, in ABCD.yaml von DELTA (step_5: DELTA.RESET)."
+  O2: "Matrix-Beispiel S5 zeigt BIT: 1 mit STATUS: CLEAN; nach bit_1 müsste STATUS = UPDATED sein."
+
+invarianten:
+  G1: "ebenen_gesetz ist in ABCD.yaml, ZTI.yaml und ZOOM+SEK.yaml identisch."
+  G2: "sektionen in ZOOM+SEK.yaml und ABCD.yaml stimmen in id, name, Zoom und Layer überein."
+  G3: "Die Permutationen in ZOOM+SEK.yaml und ABCD.yaml sind gleich."
+  I1: "Jede Zoom-ID in sektionen existiert in ebenen_gesetz.achsen.zoom.ids."
+  I2: "Jede Layer-ID in sektionen, muster, telemetry und den Beispielen existiert in ebenen_gesetz.achsen.layer.ids."
+  I3: "zoom.reduktion deckt alle 5 Zoom-IDs ab und ergibt genau 4 Ziele (MESO, MAKRO, MIKRO, META_NANO)."
+  I4: "sektionen sind S1..S5, lückenlos, aufsteigend und gleich ebenen_gesetz.achsen.sektion.ids."
+  I5: "Jedes muster enthält alle 4 Layer genau einmal und endet mit DELTA."
+  I6: "abcd_agent_loop_3_plus_1 enthält keine Schlüssel zoom oder sektion."
+  I7: "shared_state_matrix.schema.status ist in status_werte."
+  I8: "Jede Sektion hat nicht leere Felder fokus, funktion und gate_bedingung."
+  I9: "Jedes Beispiel in chat_header_versionen nennt Zoom und Operator, die zur genannten Sektion gehören."
+  I10: "telemetry (sektion, zoom, active_operator) ist eine gültige Kombination laut sektionen."

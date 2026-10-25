@@ -1,0 +1,220 @@
+# KANONISCHES LEXIKON (SES) v5
+# ZTIS ist das kleinste vollständige Objekt und die höchste Direktive.
+# Begriffe bringen keine eigene Bedeutung mit - sie werden auf eine der vier Funktionen gemappt.
+# Gesetz: lexikalische Geschlossenheit. Wortschatz kann wachsen, ZTIS-Funktionen nicht.
+# Syncpoint je Begriff = die Funktion (Begriff -> Funktion -> ZTIS eindeutig).
+# v4: UNIVERSALLE VERBEN deklariert (erfassen/umformen/anweisen/entscheiden);
+#     innere Operation des 0/1 (IDENT/GENERATE/TRANSFORM/VALIDATE) geschlossen auf Z/T/I/S.
+# v5: ZOOM aus ZTIS herausgelöst (zoom_zuordnung: Zuordnung statt Identität);
+#     Achsen (Säule, Layer, Zoom, Sektion, Delta) sind nur in ABCD.yaml, ZTI.yaml, ZOOM+SEK.yaml (ebenen_gesetz) definiert.
+# Basis: RO-Direktive, RO-Material (META_PROMPT_GENERATOR, Formschablonen), MINIMAL-CORE.yaml (ses/minimal-core/v6).
+
+meta:
+  schema: ses/lexikon/v5
+  zweck: "ZTIS als Objekt, Wörterbuch und Gesetz in einer Einheit - kleinstes Objekt ist höchste Direktive"
+  entwicklungsvertrag: "01_spezifikationen/ENTWICKLUNGSVERTRAG.md"
+  zugriffsordnung: "01_spezifikationen/LOCK_ORDER.md"
+  gesetz: "lexikalische Geschlossenheit"
+  sprache: de
+  version: 5
+  supersedes: ["ses/lexikon/v4"]
+  kanon_dateien:
+    - "01_spezifikationen/ABCD.yaml"
+    - "01_spezifikationen/ZTI.yaml"
+    - "01_spezifikationen/ZOOM+SEK.yaml"
+
+universelle_verben:
+  Z: "ERFASSEN"
+  T: "UMFORMEN"
+  I: "ANWEISEN"
+  S: "ENTSCHEIDEN"
+  notiz: "Die vier Zwecke des Materials (information, transformation, execution_instruction, decision) und die innere Operation des 0/1 (IDENT, GENERATE, TRANSFORM, VALIDATE) sind dieselben vier Verben - Reihenfolge frei (BCD…-Regel), keine neuen Säulen."
+
+ZTIS:
+  Z: "ZUSTAND"
+  T: "TRANSFORMATION"
+  I: "INFORMATION"
+  S: "SYNPOINT"
+
+  GESETZ:
+    einheit: "ZTIS"
+    ohne_Z: "kein_T"
+    ohne_T: "kein_Delta"
+    ohne_I: "keine_gerichtete_Transformation"
+    ohne_S: "keine_gebundene_Einheit"
+
+  REKURSION:
+    Z: "ZTIS"
+    T: "ZTIS"
+    I: "ZTIS"
+    S: "ZTIS"
+
+  BEGRIFF:
+    name: ""
+    funktion: "Z | T | I | S"
+    zoom: "Meso | Makro | Mikro | Meta_Nano"
+    bindung: "ZTIS"
+
+# ZUORDNUNG (keine Identität): Zoom-Stufe (3+1, reduziert) -> Säule.
+# Quelle: ABCD.yaml zuordnung.anker. Die Zoom-Achse selbst ist nur in ZOOM+SEK.yaml (ebenen_gesetz) definiert.
+zoom_zuordnung:
+  Meso: "Z"
+  Makro: "T"
+  Mikro: "I"
+  Meta_Nano: "S"
+
+lexikon_gesetz:
+  lexikalische_geschlossenheit: true
+  syncpoint_ist_die_funktion: true
+  gültig_erst_wenn: "Begriff -> Funktion -> ZTIS eindeutig"
+  keine_zuordnung: "bleibt offen"
+  mehrere_zuordnungen: "konkrete Zoomstufe bestimmen, dann eindeutig"
+  neuer_begriff_keine_neue_saeule: true
+  wortschatz_waechst_funktionen_nicht: true
+  achsen_getrennt: "Zoom (Raum), Sektion (Zeit), Layer/Operator (Handlung), Säule (ontisch) und Delta (Validator) sind getrennte Achsen; ihre IDs stehen nur in ebenen_gesetz der Kanon-Dateien"
+
+begriffe:
+  - name: "ALPHA"
+    funktion: "Z"
+    zoom: "Meso"
+    bindung: "ZTIS"
+    worte:
+      - "ZUSTAND"
+      - "Nomen"
+      - "WAS"
+      - "SEIN"
+      - "Meso"
+      - "hexis"
+      - "energeia"
+      - "Legislative"
+      - "Alpha-Zustandsbereich"
+  - name: "BRAVO"
+    funktion: "T"
+    zoom: "Makro"
+    bindung: "ZTIS"
+    worte:
+      - "TRANSFORMATION"
+      - "Verb"
+      - "TUN"
+      - "WODURCH"
+      - "Makro"
+      - "kinesis"
+      - "metabolē"
+      - "dynamis"
+      - "Werkstatt"
+  - name: "CHARLIE"
+    funktion: "I"
+    zoom: "Mikro"
+    bindung: "ZTIS"
+    worte:
+      - "INFORMATION"
+      - "Adjektiv"
+      - "WIE"
+      - "WOHIN"
+      - "Mikro"
+      - "eidos"
+      - "logos"
+      - "Arbeitstisch"
+  - name: "DELTA"
+    funktion: "S"
+    zoom: "Meta_Nano"
+    bindung: "ZTIS"
+    worte:
+      - "SYNPOINT"
+      - "Syncpunkt"
+      - "Grammatik"
+      - "Sprache"
+      - "+1"
+      - "Meta/Nano"
+      - "Waechter"
+      - "Integration"
+      - "Interferenz"
+      - "synolon"
+      - "holon"
+      - "antiphasis"
+      - "machē"
+      - "gebundene Einheit"
+      - "II (Integration + Interferenz)"
+  - name: "GATE"
+    funktion: "S"
+    zoom: "Meta_Nano"
+    bindung: "ZTIS"
+    worte:
+      - "Gate"
+      - "Entscheidung"
+      - "PASST REIN?"
+      - "0/1-Domäne"
+      - "binäre Entscheidungsdomäne"
+    notiz: "GATE = 0/1-Entscheidung (RO-Direktive); innerhalb läuft die 3+1-Operation. Nicht mit der Operation vermischen."
+  - name: "IDENT (erfassen)"
+    funktion: "Z"
+    zoom: "Meso"
+    bindung: "ZTIS"
+    worte:
+      - "ERFASSEN"
+      - "erkennen"
+      - "analysieren"
+      - "information"
+      - "context_analysis"
+      - "was ist"
+    notiz: "universelles Verb für Z; erster Schritt der inneren Operation des 0/1 (Reihenfolge frei)"
+  - name: "GENERATE (umformen)"
+    funktion: "T"
+    zoom: "Makro"
+    bindung: "ZTIS"
+    worte:
+      - "UMFORMEN"
+      - "erzeugen"
+      - "bewegen"
+      - "generieren"
+      - "transformation"
+      - "transformation_layer"
+    notiz: "universelles Verb für T; zweiter Schritt der inneren Operation des 0/1"
+  - name: "TRANSFORM (anweisen)"
+    funktion: "I"
+    zoom: "Mikro"
+    bindung: "ZTIS"
+    worte:
+      - "ANWEISEN"
+      - "formen"
+      - "spezifizieren"
+      - "execution_instruction"
+      - "das WIE"
+    notiz: "universelles Verb für I; dritter Schritt der inneren Operation des 0/1 - sagt WIE"
+  - name: "VALIDATE (entscheiden)"
+    funktion: "S"
+    zoom: "Meta_Nano"
+    bindung: "ZTIS"
+    worte:
+      - "ENTSCHEIDEN"
+      - "validieren"
+      - "prüfen"
+      - "decision"
+      - "STOP_RULE"
+      - "Tor"
+      - "Rückkopplung"
+    notiz: "universelles Verb für S; das Tor der inneren Operation - prüft 0/1, bei Fehlschlag Rückkopplung zum letzten gültigen Punkt"
+  - name: "Traegerform"
+    funktion: "I"
+    zoom: "Mikro"
+    bindung: "ZTIS"
+    worte:
+      - "Endung"
+      - ".md / .json / .jsonl / .yaml / .py / .ps1 / .txt"
+    notiz: "trägt die Information; Rolle entsteht erst durch ZTIS-Nutzung"
+  - name: "Ordner (externes Gedaechtnis)"
+    funktion: "S"
+    zoom: "Meta_Nano"
+    bindung: "ZTIS"
+    worte:
+      - "Persistenz"
+      - "externes Gedaechtnis"
+    notiz: "Bindung über Sessions hinweg; ohne Datei keine überlebende Information"
+
+offen:
+  - name: "Operator"
+    grund: "mehrdeutig - ist nicht eine Funktion, sondern die Einheit selbst (ZTIS-Instanz auf allen Zoomstufen); bleibt offen bis eindeutige Funktion/Stufe bestimmt; ZOOM+SEK.yaml definiert operator als Handlungsrolle (Achse layer) - Widerspruch, Entscheidung offen"
+  - name: "Bruchstelle"
+    grund: "keine Funktion - GESETZ-Warnsignal (Regelverletzung); wird nicht auf Z/T/I/S gemappt"
+  - name: "0/1"
+    grund: "kleinste operative Einheit des Gates; selbst ein vollständiges 3+1 (Rekursion) - keine einzelne Funktion, analog Operator (RO-Direktive)"
