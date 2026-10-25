@@ -1,7 +1,6 @@
 # Go-Build-Artefakte
 __forcestation/t1_pipeline-go/pipeline-go
 __forcestation/e1_vigil-state/vigil
-__forcestation/e1_vigil-state/vigil_state
 
 # Reste abgebrochener atomarer Schreibvorgänge
 *.tmp

@@ -1,3 +1,3 @@
-module vigil_state
+module vigil
 
 go 1.24
