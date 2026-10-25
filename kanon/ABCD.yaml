@@ -1,0 +1,140 @@
+name: "minimal-core"
+version: "1.1.1"
+
+# EBENEN-GESETZ: in allen Kanon-Dateien identisch (Gleichheit wird geprüft, Invariante G1).
+ebenen_gesetz:
+  gesetz_der_reinen_ebenen: "Keine Vermischung von Raum (Zoom), Zeit (Sektion), Handlung (Operator) und Zustand (State)."
+  achsen:
+    saeule:
+      dimension: ONTISCH
+      frage: "WAS ist es"
+      ids: [Z, T, I, S]
+    layer:
+      dimension: HANDLUNG
+      frage: "WER handelt"
+      ids: [ALPHA, BRAVO, CHARLIE, DELTA]
+    zoom:
+      dimension: RAUM
+      frage: "WO steht der Blick"
+      ids: [META, MAKRO, MESO, MIKRO, NANO]
+      reduktion:
+        # 5 -> 3+1, kein Detailverlust: META und NANO bündeln zur +1-Ebene
+        MESO: MESO
+        MAKRO: MAKRO
+        MIKRO: MIKRO
+        META: META_NANO
+        NANO: META_NANO
+    sektion:
+      dimension: ZEIT
+      frage: "WANN im Zyklus"
+      ids: [S1, S2, S3, S4, S5]
+    delta:
+      dimension: VALIDATOR
+      frage: "DARF gebunden werden"
+      ids: [0, 1]
+  regeln:
+    1: "Eine Frage pro Achse."
+    2: "Definiert wird nur in ebenen_gesetz.achsen; alle anderen Blöcke verweisen per ID."
+    3: "Raum, Zeit und Handlung sind getrennte Achsen: Zoom = Position, Sektion = Zyklusphase, Layer = Rolle."
+    4: "Zuordnungen zwischen Achsen (zum Beispiel ALPHA <-> MESO) stehen in eigenen Tabellen, nie als Identität in einer Achse."
+    5: "Jede Sektion ist rekursiv ein Sub-Zyklus mit eigenen S1..S5 eine Ebene tiefer."
+
+zuordnung:
+  anker:
+    - {layer: ALPHA,   saeule: Z, zoom: MESO}
+    - {layer: BRAVO,   saeule: T, zoom: MAKRO}
+    - {layer: CHARLIE, saeule: I, zoom: MIKRO}
+    - {layer: DELTA,   saeule: S, zoom: META_NANO}
+
+architecture:
+  pattern: "3+1"
+  agents:
+    workers: [ALPHA, BRAVO, CHARLIE]
+    synthesizer: DELTA
+  state_model: "SHARED"
+  decision_gate: "1-BIT (0 / 1)"
+
+shared_state:
+  schema:
+    data: null
+    hash: null
+    latency_ms: 0.0
+    history: []
+    status: "SLEEP"
+    tick: 0
+  status_werte: [SLEEP, WAKE, UPDATED, CLEAN]
+  invariant: "assert(tick >= 0 and status in ['SLEEP', 'WAKE', 'UPDATED', 'CLEAN'])"
+
+workers:
+  alpha:
+    role: "WORKER_A"
+    interface: "PROCESS(input, state) -> payload_a"
+  bravo:
+    role: "WORKER_B"
+    interface: "PROCESS(input, state) -> payload_b"
+  charlie:
+    role: "WORKER_C"
+    interface: "PROCESS(input, state) -> payload_c"
+
+synthesizer:
+  delta:
+    role: "SYNTHESIS_AND_GATE"
+    task: "Synthese aller drei Worker, finale Validierung und Schließung"
+    interface: "SYNTHESIZE(candidate_payload, state) -> bit"
+    routing:
+      bit_1: "APPLY(candidate_payload, state) -> STATE = UPDATED"
+      bit_0: "RESET(state) -> STATE = CLEAN"
+
+execution_loop:
+  description: "Drei Worker übergeben in Kette, Agent D schließt die Synthese ab"
+  valid_permutations:
+    - [ALPHA, BRAVO, CHARLIE, DELTA]
+    - [BRAVO, CHARLIE, ALPHA, DELTA]
+    - [CHARLIE, BRAVO, ALPHA, DELTA]
+  flow:
+    step_1: "W1(input, state) -> payload_1"
+    step_2: "W2(payload_1, state) -> payload_2"
+    step_3: "W3(payload_2, state) -> candidate_payload"
+    step_4: "DELTA.SYNTHESIZE(candidate_payload, state) -> BIT"
+    step_5: "IF BIT == 1 THEN DELTA.APPLY() ELSE DELTA.RESET()"
+
+rules:
+  1: "Die drei Worker (A, B, C) erzeugen, transformieren oder prüfen den Kandidaten in Reihe."
+  2: "Agent D ist die zwingende Synthese aller drei Vorstufen und fällt die finale Entscheidung."
+  3: "Keine Zustandsbindung (UPDATE) ohne erfolgreiches Passieren von D."
+  4: "Alle Agenten lesen und schreiben ausschließlich über den SHARED STATE."
+  5: "Jeder Durchlauf endet deterministisch (keine offenen Zyklen)."
+
+base2_logic:
+  description: "3+1 als fundamentale Base-2 Entscheidungslogik"
+  formula: "Ω = Δ((Worker_1, Worker_2, Worker_3) + D)"
+  components:
+    triad_phase: "3 (Beliebige Permutation aus drei Worker-Stationen)"
+    synthesis_gate: "+1 (Agent D als Schranke und Abschluss)"
+  binary_outcome:
+    bit_0:
+      name: "REJECT / RESET"
+      action: "STATE = CLEAN"
+      meaning: "Synthese ungültig oder Invariante verletzt. Sicherer Rückfall."
+    bit_1:
+      name: "COMMIT / EXECUTE"
+      action: "STATE = UPDATED"
+      meaning: "Synthese bestätigt. Bindung des neuen Zustands."
+
+# ABLAUF: Sektionen zeigen nur auf Zoom-IDs und Layer-IDs (Quelle: ZYKLUS-TEMPLATE, Sektionierung).
+sektionen:
+  - {id: S1, name: "MATERIALBESCHAFFUNG_FORMALANALYSE", zoom: [META, MAKRO], layer: [ALPHA, CHARLIE]}
+  - {id: S2, name: "STRATEGISCHE_STRUKTURIERUNG",        zoom: [MAKRO, MESO], layer: [ALPHA, DELTA]}
+  - {id: S3, name: "OPERATIVE_UMSETZUNG",                zoom: [MESO, MIKRO], layer: [BRAVO]}
+  - {id: S4, name: "KRITISCHE_REVISION_INTEGRATION",     zoom: [MIKRO, NANO], layer: [CHARLIE, DELTA]}
+  - {id: S5, name: "FINALISIERUNG_WIRKUNG",              zoom: [META],        layer: [ALPHA, BRAVO, CHARLIE, DELTA]}
+
+invarianten:
+  G1: "ebenen_gesetz ist in ABCD.yaml, ZTI.yaml und ZOOM+SEK.yaml identisch."
+  I1: "Jede Zoom-ID in sektionen existiert in ebenen_gesetz.achsen.zoom.ids."
+  I2: "Jede Layer-ID in sektionen, zuordnung und execution_loop existiert in ebenen_gesetz.achsen.layer.ids."
+  I3: "zoom.reduktion deckt alle 5 Zoom-IDs ab und ergibt genau 4 Ziele (MESO, MAKRO, MIKRO, META_NANO)."
+  I4: "sektionen sind S1..S5, lückenlos und aufsteigend."
+  I5: "Jede valid_permutation enthält alle 4 Layer genau einmal und endet mit DELTA."
+  I6: "workers und synthesizer enthalten keine Schlüssel zoom oder sektion."
+  I7: "shared_state.schema.status ist in status_werte."

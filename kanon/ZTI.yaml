@@ -1,0 +1,123 @@
+spec: "ZTI-II-CANON"
+version: "1.1"
+
+# EBENEN-GESETZ: in allen Kanon-Dateien identisch (Gleichheit wird geprüft, Invariante G1).
+ebenen_gesetz:
+  gesetz_der_reinen_ebenen: "Keine Vermischung von Raum (Zoom), Zeit (Sektion), Handlung (Operator) und Zustand (State)."
+  achsen:
+    saeule:
+      dimension: ONTISCH
+      frage: "WAS ist es"
+      ids: [Z, T, I, S]
+    layer:
+      dimension: HANDLUNG
+      frage: "WER handelt"
+      ids: [ALPHA, BRAVO, CHARLIE, DELTA]
+    zoom:
+      dimension: RAUM
+      frage: "WO steht der Blick"
+      ids: [META, MAKRO, MESO, MIKRO, NANO]
+      reduktion:
+        # 5 -> 3+1, kein Detailverlust: META und NANO bündeln zur +1-Ebene
+        MESO: MESO
+        MAKRO: MAKRO
+        MIKRO: MIKRO
+        META: META_NANO
+        NANO: META_NANO
+    sektion:
+      dimension: ZEIT
+      frage: "WANN im Zyklus"
+      ids: [S1, S2, S3, S4, S5]
+    delta:
+      dimension: VALIDATOR
+      frage: "DARF gebunden werden"
+      ids: [0, 1]
+  regeln:
+    1: "Eine Frage pro Achse."
+    2: "Definiert wird nur in ebenen_gesetz.achsen; alle anderen Blöcke verweisen per ID."
+    3: "Raum, Zeit und Handlung sind getrennte Achsen: Zoom = Position, Sektion = Zyklusphase, Layer = Rolle."
+    4: "Zuordnungen zwischen Achsen (zum Beispiel ALPHA <-> MESO) stehen in eigenen Tabellen, nie als Identität in einer Achse."
+    5: "Jede Sektion ist rekursiv ein Sub-Zyklus mit eigenen S1..S5 eine Ebene tiefer."
+
+zuordnung:
+  saeule_alias:            # Stations-ID -> Säule der Achse (II = Integration + Interferenz = Wirkung des Syncpunkts S)
+    Z: Z
+    T: T
+    I: I
+    II: S
+  bindung:
+    COMMIT: {delta: 1}     # COMMIT ist die Bindung bei Bit 1, keine eigene Säule
+
+stationen:
+  Z:
+    ist: "SUBSTRAT"
+    traegt: "ZTII"
+    inhalt: "Aktualer Speicherwert im Register"
+    benoetigt: [T, I, II]
+    faellt_auf_0_wenn: "Kein realer Speicher vorhanden oder Wert korrupt"
+  T:
+    ist: "KINESIS"
+    traegt: "ZTII"
+    inhalt: "Deterministischer Übergang Z_alt -> Z_neu"
+    benoetigt: [Z, I, II]
+    faellt_auf_0_wenn: "Keine Ausführung erfolgt oder Übergang abbricht"
+  I:
+    ist: "EIDOS"
+    traegt: "ZTII"
+    inhalt: "Datentyp, Schema und Prädikat assert(P)"
+    benoetigt: [Z, T, II]
+    faellt_auf_0_wenn: "Typ ungültig oder Invariante verletzt"
+  II:
+    ist: "DOPPEL_WAECHTER"
+    traegt: "ZTII"
+    inhalt: "System-Attraktor (Kohaesion) + Reibungs-Veto (Elenchos)"
+    benoetigt: [Z, T, I]
+    faellt_auf_0_wenn: "Systemdrift auftritt oder Reibung/Fehler ueber Budget"
+  COMMIT:
+    ist: "ZUSTANDSBINDUNG"
+    traegt: "ZTII"
+    inhalt: "Einfrieren des neuen Zustands (STATE = UPDATED)"
+    bedingung: "Alle 4 Zwischen-Bits stehen auf 1"
+    bedingung_bits: [bit_z_t, bit_t_i, bit_i_ii, bit_ii_commit]
+
+bits:
+  bit_z_t:
+    von: Z
+    nach: T
+    schranke: "3+1"
+    0: "DROP (State = CLEAN)"
+    1: "PASS (Freigabe fuer T)"
+  bit_t_i:
+    von: T
+    nach: I
+    schranke: "3+1"
+    0: "DROP (State = CLEAN)"
+    1: "PASS (Freigabe fuer I)"
+  bit_i_ii:
+    von: I
+    nach: II
+    schranke: "3+1"
+    0: "DROP (State = CLEAN)"
+    1: "PASS (Freigabe fuer II)"
+  bit_ii_commit:
+    von: II
+    nach: COMMIT
+    schranke: "3+1"
+    0: "DROP (Veto aktiv -> Reset -> State = CLEAN)"
+    1: "PASS (Rechtskraeftig -> Freigabe fuer Commit)"
+
+kette:
+  gesetz: "Z(ZTII) -> BIT -> T(ZTII) -> BIT -> I(ZTII) -> BIT -> II(ZTII) -> BIT -> COMMIT(ZTII)"
+  reihenfolge: [Z, T, I, II, COMMIT]
+  regel: "Jedes BIT ist eine atomare 3+1 Schranke. Bei 0 sofortiger DROP ohne Fehlerfortpflanzung."
+
+invarianten:
+  G1: "ebenen_gesetz ist in ABCD.yaml, ZTI.yaml und ZOOM+SEK.yaml identisch."
+  I1: "Jede ID in kette.reihenfolge existiert in stationen."
+  I2: "bits hat genau len(reihenfolge)-1 Einträge; Bit k verbindet reihenfolge[k] mit reihenfolge[k+1]."
+  I3: "Jedes Bit hat schranke '3+1', Wert 0 beginnt mit 'DROP', Wert 1 beginnt mit 'PASS'."
+  I4: "COMMIT.bedingung_bits enthält genau alle Bits der Kette."
+  I5: "benoetigt jeder Säulen-Station Z, T, I, II ist die Menge der drei anderen (volle Interdependenz)."
+  I6: "Jede Station trägt 'ZTII' (Rekursion)."
+  I7: "stationen, bits und kette enthalten keine Schlüssel zoom, sektion, layer oder operator."
+  I8: "saeule_alias zeigt nur auf ebenen_gesetz.achsen.saeule.ids und deckt alle 4 Säulen genau einmal ab."
