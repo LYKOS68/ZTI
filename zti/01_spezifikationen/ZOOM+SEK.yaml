@@ -105,7 +105,11 @@ chat_header_versionen:
         └──────────────────────────────────────────────────────────────────────────┘
       - |
         ┌─ SEKTION: S5 (Finalisierung) ─────────── ZOOM: META (Gesamtwirkung) ─────┐
-        │ OPERATOREN: A+B+C+D (Release) ─── STATUS: CLEAN ───── BIT: 1 (CYCLE_STOP)│
+        │ OPERATOREN: A+B+C+D (Release) ─── STATUS: UPDATED ──── BIT: 1 (CYCLE_STOP)│
+        └──────────────────────────────────────────────────────────────────────────┘
+      - |
+        ┌─ SEKTION: S5 (Finalisierung) ─────────── ZOOM: META (Gesamtwirkung) ─────┐
+        │ OPERATOREN: A+B+C+D (Release) ─── STATUS: CLEAN ────── BIT: 0 (RESET)    │
         └──────────────────────────────────────────────────────────────────────────┘
     einsatz: "Bei Sektionswechseln, Architektur-Meilensteinen und Gate-Entscheidungen."
 
@@ -124,7 +128,7 @@ abcd_agent_loop_3_plus_1:
     base2_schranke:
       bit_0:
         signal: "REJECT / RESET"
-        ausfuehrung: "CHARLIE.RESET(state) -> STATE = CLEAN"
+        ausfuehrung: "DELTA.RESET(state) -> STATE = CLEAN"
         wirkung: "Invariante verletzt oder Störfall. Keine persistente Änderung."
       bit_1:
         signal: "COMMIT / EXECUTE"
@@ -147,13 +151,10 @@ shared_state_matrix:
   status_werte: [SLEEP, WAKE, UPDATED, CLEAN]
   invariante: "assert(tick >= 0 and status in ['SLEEP', 'WAKE', 'UPDATED', 'CLEAN'])"
 
-# Widersprüche, die ich NICHT aufgelöst habe (Entscheidung liegt bei dir):
-offen:
-  O1: "bit_0 wird hier von CHARLIE.RESET ausgeführt, in ABCD.yaml von DELTA (step_5: DELTA.RESET)."
-  O2: "Matrix-Beispiel S5 zeigt BIT: 1 mit STATUS: CLEAN; nach bit_1 müsste STATUS = UPDATED sein."
-
 invarianten:
   G1: "ebenen_gesetz ist in ABCD.yaml, ZTI.yaml und ZOOM+SEK.yaml identisch."
+  I_O1: "BIT == 0 führt über DELTA.RESET(state) zu STATE = CLEAN; CHARLIE führt keine Reset-Mutation aus."
+  I_O2: "Jedes S5-Matrixbeispiel erfüllt BIT == 1 => STATUS = UPDATED und BIT == 0 => STATUS = CLEAN."
   G2: "sektionen in ZOOM+SEK.yaml und ABCD.yaml stimmen in id, name, Zoom und Layer überein."
   G3: "Die Permutationen in ZOOM+SEK.yaml und ABCD.yaml sind gleich."
   I1: "Jede Zoom-ID in sektionen existiert in ebenen_gesetz.achsen.zoom.ids."

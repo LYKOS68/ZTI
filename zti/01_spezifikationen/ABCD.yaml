@@ -131,6 +131,8 @@ sektionen:
 
 invarianten:
   G1: "ebenen_gesetz ist in ABCD.yaml, ZTI.yaml und ZOOM+SEK.yaml identisch."
+  I_O1: "BIT == 0 führt über DELTA.RESET(state) zu STATE = CLEAN; CHARLIE führt keine Reset-Mutation aus."
+  I_O2: "Jedes S5-Matrixbeispiel erfüllt BIT == 1 => STATUS = UPDATED und BIT == 0 => STATUS = CLEAN."
   I1: "Jede Zoom-ID in sektionen existiert in ebenen_gesetz.achsen.zoom.ids."
   I2: "Jede Layer-ID in sektionen, zuordnung und execution_loop existiert in ebenen_gesetz.achsen.layer.ids."
   I3: "zoom.reduktion deckt alle 5 Zoom-IDs ab und ergibt genau 4 Ziele (MESO, MAKRO, MIKRO, META_NANO)."

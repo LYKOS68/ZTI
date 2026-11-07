@@ -1,0 +1,48 @@
+// ============================================================================
+// ZTI Language (ZL) — Formale EBNF-Spezifikation (v0.2)
+// ============================================================================
+
+Program         := { Statement [ NL ] } EOF ;
+
+Statement       := ReadStmt
+                 | TransformStmt
+                 | CheckStmt
+                 | CommitStmt
+                 | IfStmt
+                 | WhileStmt
+                 | SendStmt
+                 | HaltStmt ;
+
+// --- Transaktions-Gates (3+1) ---
+ReadStmt        := "ERFASSE" Ident "ALS" Type [ "VON" Expr ] ;
+TransformStmt   := "FORME" "VON" Ident "NACH" Ident "MIT" Expr ;
+CheckStmt       := "PRÜFE" Ident "WENN" Expr ;
+CommitStmt      := "BIND" Ident ;
+
+// --- Kontrollfluss & Routing ---
+IfStmt          := "WENN" Expr "DANN" { Statement [ NL ] } [ "SONST" { Statement [ NL ] } ] "ENDE" ;
+WhileStmt       := "SOLANGE" Expr "MACHE" { Statement [ NL ] } "ENDE" ;
+SendStmt        := "SENDE" Ident "MIT" Expr "," Expr "," Expr ; // Ziel, MsgType, Val1, Val2
+HaltStmt        := "STOP" [ IntLiteral ] ;
+
+// --- Ausdrücke mit Präzedenz (Pratt-Parser) ---
+Expr            := LogicalOrExpr ;
+LogicalOrExpr   := LogicalAndExpr { "ODER" LogicalAndExpr } ;
+LogicalAndExpr  := EqualityExpr { "UND" EqualityExpr } ;
+EqualityExpr    := RelationalExpr { ( "==" | "!=" ) RelationalExpr } ;
+RelationalExpr  := AdditiveExpr { ( "<" | "<=" | ">" | ">=" ) AdditiveExpr } ;
+AdditiveExpr    := MultiplicativeExpr { ( "+" | "-" ) MultiplicativeExpr } ;
+MultiplicativeExpr := UnaryExpr { ( "*" | "/" | "%" ) UnaryExpr } ;
+UnaryExpr       := [ "-" | "NICHT" ] PrimaryExpr ;
+PrimaryExpr     := Ident | IntLiteral | "(" Expr ")" ;
+
+// --- Lexikalische Basiselemente ---
+Type            := "U16" | "BOOL" | "MSG" ;
+Ident           := Letter { Letter | Digit | "_" } ;
+IntLiteral      := DecimalLiteral | HexLiteral ;
+DecimalLiteral  := Digit { Digit } ;
+HexLiteral      := "0" ( "x" | "X" ) HexDigit { HexDigit } ;
+
+Letter          := "a".."z" | "A".."Z" | "ä" | "ö" | "ü" | "Ä" | "Ö" | "Ü" | "ß" ;
+Digit           := "0".."9" ;
+HexDigit        := Digit | "a".."f" | "A".."F" ;

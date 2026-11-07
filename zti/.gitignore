@@ -8,3 +8,6 @@ __forcestation/e4_secure-log/securelog
 # Reste abgebrochener atomarer Schreibvorgänge
 *.tmp
 __pycache__/
+
+# lokal gebaute Binary
+/zti

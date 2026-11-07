@@ -113,6 +113,8 @@ kette:
 
 invarianten:
   G1: "ebenen_gesetz ist in ABCD.yaml, ZTI.yaml und ZOOM+SEK.yaml identisch."
+  I_O1: "BIT == 0 führt über DELTA.RESET(state) zu STATE = CLEAN; CHARLIE führt keine Reset-Mutation aus."
+  I_O2: "Jedes S5-Matrixbeispiel erfüllt BIT == 1 => STATUS = UPDATED und BIT == 0 => STATUS = CLEAN."
   I1: "Jede ID in kette.reihenfolge existiert in stationen."
   I2: "bits hat genau len(reihenfolge)-1 Einträge; Bit k verbindet reihenfolge[k] mit reihenfolge[k+1]."
   I3: "Jedes Bit hat schranke '3+1', Wert 0 beginnt mit 'DROP', Wert 1 beginnt mit 'PASS'."
