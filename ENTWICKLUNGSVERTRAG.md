@@ -123,3 +123,16 @@
    - Keine redundanten Dokumentationen oder doppelten Datenpfade.
    - Keine ungenutzten oder undeklarierten Dateiformate im Repository.
    - Jede Datei im Repository muss einen im Vertrag verankerten Konsumenten und eindeutigen operativen Zweck besitzen.
+
+---
+
+## § 9 Übergeordnetes Gesetz: Terminologische Einheitlichkeit & Inbound/Output-Schema (Terminological Consistency Law)
+
+1. **Gesetz der terminologischen Einheitlichkeit (Terminological Consistency Law):**  
+   - **Kanonischer Bezeichner:** Jedes Konzept, jeder Zustand ($Z$), jeder Datentyp, jedes Datenfeld und jede Transformation ($T$) besitzt im gesamten Repository (Code, Tests, Dokumente, Schemata) exakt einen einzigen, unveränderlichen kanonischen Namen.
+   - **Absolutes Synonymverbot:** Die Verwendung von Pseudonymen, abweichenden Aliassen, semantischen Varianten oder lokalen Übersetzungen für dieselbe Entität ist über alle Schichten hinweg untersagt.
+   - **Synchronisationspflicht:** Eine Umbenennung darf niemals isoliert in einer Datei stattfinden, sondern erfordert ein atomares Update über Vertrag, Typdefinitionen und Tests hinweg.
+2. **Inbound- und Output-Schema (Deterministische Schnittstellengarantie):**  
+   - **Striktes Inbound-Schema:** Jede Engine, Funktion und Pipeline akzeptiert ausschließlich typisierte, vorab deklarierte Eingabedaten. Ungetypte Wildcards (`any`, `interface{}` ohne Validierung) oder implizite Annahmen sind als Inbound verboten.
+   - **Deterministisches Output-Schema:** Jede Operation liefert ausnahmslos entweder ein vollständig schema-konformes Datenobjekt oder einen typisierten Fehlercode zurück.
+   - **Fail-Fast-Validierung:** Entspricht ein Inbound-Reiz nicht exakt dem definierten Schema, bricht die Kaskade vor der Weiterverarbeitung mit Exit-Code $\neq 0$ und strukturiertem Fehlereintrag im Maschinenprotokoll ab.
