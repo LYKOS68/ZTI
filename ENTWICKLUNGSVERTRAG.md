@@ -63,3 +63,63 @@
    Dieses Repository und die darin deklarierten Verträge bilden die einzige Quelle der Wahrheit (Single Source of Truth).
 2. **Vorrang:**  
    Bei Konflikten zwischen externen Annahmen, Modellen oder historischen Codefragmenten hat der Wortlaut dieses Entwicklungsvertrags absolute Priorität.
+
+---
+
+## § 6 Layer Order (Deterministische Ausführungskaskade)
+
+1. **Unverletzliche Reihenfolge:**  
+   Jede Handlung im Repository durchläuft ausnahmslos die Kaskade:  
+   $$\text{Policy} \longrightarrow \text{Role} \longrightarrow \text{Strategy} \longrightarrow \text{Task} \longrightarrow \text{Tool} \longrightarrow \text{Execution}$$
+2. **Physische Bestimmung der Schichten:**  
+   - **Policy:** UTF-8-Vertragsdatei (`ENTWICKLUNGSVERTRAG.md`) und Filterregeln (`.gitignore`), die Dateisystem- und Verhaltensgrenzen mit harten Exit-Codes deklarieren.
+   - **Role:** System-Konfiguration und Prompt-Direktive, die den funktionalen Handlungsrahmen und erlaubte Arbeitsverzeichnisse setzt.
+   - **Strategy:** Strukturierter Ausführungsplan als geordnete Sequenz konkreter Zieldateipfade und Komponenten.
+   - **Task:** Diskrete, atomare Arbeitseinheit mit definierten Eingangs- und Ausgangsdaten für genau eine Zieldatei oder Komponente.
+   - **Tool:** Minimal notwendiger Funktions- oder CLI-Aufruf (`write_file`, Shell-Kommando, Go-Compiler) ohne Kompetenzübertragung.
+   - **Execution:** Laufender Betriebssystem-Prozess mit messbarem Exit-Code ($0$ oder $\neq 0$) und verifizierter Dateisystem-Mutation.
+3. **Kaskaden-Invarianz:**  
+   Eine nachgelagerte Schicht darf einer vorgelagerten Schicht niemals widersprechen. Bei Konflikten bricht der Prozess sofort ohne Mutation ab.
+
+---
+
+## § 7 Sprach- und Definitionsregeln (Physisches Bindungsgebot)
+
+1. **Physische Lokalisierung:**  
+   Jeder technische Begriff muss an eine konkrete physische Entität gebunden sein (Dateiformat, relativer Dateipfad, Go-Struct, Betriebssystem-Prozess). Abstrakte Worthülsen ohne physische Entsprechung sind unzulässig.
+2. **Pflicht-Attribute jeder Begriffsdefinition:**  
+   Jede Systemkomponente (z. B. Engine, Algorithmus, Parser) muss zwingend vier Attribute deklarieren:
+   - *Speicherort / Dateiformat:* Konkretes Verzeichnis und Dateiendung.
+   - *Akteur / Konsument:* Wer führt aus, wer liest (Mensch, CLI/KI, Tooling).
+   - *Typisierte I/O:* Exakte Eingangsdatenstrukturen und Ausgangsdaten.
+   - *Fehlerverhalten:* Numerischer Exit-Code und deterministischer Fehler-Typ.
+3. **Konkretisierung Engine & Algorithmus:**  
+   - *Engine:* Physisch ein Go-Paket in einem dedizierten Unterordner (`pkg/<name>/`) mit getypter Struct und einer exportierten Einstiegsfunktion `Execute(...)`.
+   - *Leitender Algorithmus:* Die zentrale Kontrollflussfunktion in `engine.go`.
+   - *Unteralgorithmen:* Unexportierte Hilfsfunktionen in separaten `.go`-Dateien desselben Ordners, die reine In-Memory-Transformationen berechnen.
+
+---
+
+## § 8 Empfänger- und Rollenmatrix für Dateiformate
+
+1. **Verbindliche Format- und Konsumenten-Zuordnung:**
+   - **`.md` — Mensch + Agentensteuerung:**  
+     *Konsument:* Menschliche Entwickler und KI-Agenten.  
+     *Zweck:* Architektur, Gesetze, Regeln, Entscheidungen, Anweisungen, lesbare Übergaben und Schnittstellendokumentation. Keine ausführbare Programmlogik.
+   - **`.jsonl` — Maschinenprotokoll (Projektgedächtnis):**  
+     *Konsument:* Nachfolgende CLI- und KI-Modelle zur Selbstreparatur, Wissensübergabe und Kontextrekonstruktion.  
+     *Zweck:* Chronologische Ereignisse, Tool-Ergebnisse, Fehlerprotokolle, Abbrüche und Wiederherstellungsinformationen.  
+     *Besonderheit:* Inkrementelle maschinelle Verarbeitung im Append-Only-Verfahren mit versioniertem Schema, Zeitstempeln und eindeutigen IDs.
+   - **`.json` / `.yaml` — Strukturierte Konfiguration & Schnittstellenschemata:**  
+     *Konsument:* Compiler, Linters, Parser und automatisierte Build-Tools.  
+     *Zweck:* Feste Schemadefinitionen, statische Konfigurationen und deterministische Typen ohne Programmlogik.
+   - **`.csv` — Numerische Messreihen & Benchmarks:**  
+     *Konsument:* Analyse-Tools, Benchmarking-Pipelines und menschliche Auditierung.  
+     *Zweck:* Tabellarische Leistungsdaten, Testmetriken und Profiling-Ergebnisse.
+   - **`.go` / `*_test.go` — Ausführbare Programmlogik & Verifikation:**  
+     *Konsument:* Go-Compiler, Runtime und Test-Runner (`go test`).  
+     *Zweck:* Deterministische Transformationen ($\mathcal{T}$), Struct-Definitionen ($Z$) und automatisierte Invarianten-Prüfungen mit Exit-Code 0/1.
+2. **Anti-Ballast-Gesetz:**  
+   - Keine redundanten Dokumentationen oder doppelten Datenpfade.
+   - Keine ungenutzten oder undeklarierten Dateiformate im Repository.
+   - Jede Datei im Repository muss einen im Vertrag verankerten Konsumenten und eindeutigen operativen Zweck besitzen.
